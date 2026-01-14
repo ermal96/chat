@@ -71,8 +71,9 @@ db.exec(`
 `);
 
 // Add columns if they don't exist (for migration)
+// Note: UNIQUE constraint is added via index below, not in ALTER TABLE (SQLite limitation)
 try {
-  db.exec('ALTER TABLE users ADD COLUMN email TEXT UNIQUE');
+  db.exec('ALTER TABLE users ADD COLUMN email TEXT');
 } catch { /* Column exists */ }
 try {
   db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
@@ -102,9 +103,9 @@ try {
   db.exec('ALTER TABLE messages ADD COLUMN expires_at TEXT');
 } catch { /* Column exists */ }
 
-// Create index for email lookups
+// Create unique index for email lookups (enforces uniqueness)
 try {
-  db.exec('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)');
 } catch { /* Index exists */ }
 
 // Prepared statements
