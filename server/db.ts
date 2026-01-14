@@ -1,383 +1,242 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { Room, User, Message, RoomType, Reaction } from '../shared/types';
+import { User, Room, Message } from './models';
+import { Room as RoomType, User as UserType, Message as MessageType, RoomType as RoomTypeEnum, Reaction } from '../shared/types';
 
-const dbPath = process.env.DB_PATH || path.join(__dirname, '../../data/chat.db');
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chat';
 
-// Ensure data directory exists
-import fs from 'fs';
-const dataDir = path.dirname(dbPath);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// Connect to MongoDB
+export async function connectDB(): Promise<void> {
+  try {
+    await mongoose.connect(MONGODB_URI);
+    console.log('Connected to MongoDB');
+    console.log(`Database URI: ${MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`);
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  }
 }
 
-console.log(`Database path: ${dbPath}`);
-console.log(`Database directory exists: ${fs.existsSync(dataDir)}`);
-
-const db = new Database(dbPath);
-console.log(`Database opened successfully`);
-
-// Initialize database schema
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    nickname TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS rooms (
-    id TEXT PRIMARY KEY,
-    invite_code TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    type TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS room_members (
-    room_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (room_id, user_id),
-    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,
-    room_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    nickname TEXT NOT NULL,
-    content TEXT NOT NULL,
-    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    edited INTEGER DEFAULT 0,
-    edited_at TEXT,
-    deleted INTEGER DEFAULT 0,
-    reply_to_id TEXT,
-    reply_to_nickname TEXT,
-    reply_to_content TEXT,
-    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS reactions (
-    message_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    emoji TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (message_id, user_id, emoji),
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id);
-  CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
-  CREATE INDEX IF NOT EXISTS idx_rooms_invite_code ON rooms(invite_code);
-  CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
-`);
-
-// Add columns if they don't exist (for migration)
-// Note: UNIQUE constraint is added via index below, not in ALTER TABLE (SQLite limitation)
-try {
-  db.exec('ALTER TABLE users ADD COLUMN email TEXT');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN edited INTEGER DEFAULT 0');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN edited_at TEXT');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN deleted INTEGER DEFAULT 0');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN reply_to_id TEXT');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN reply_to_nickname TEXT');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN reply_to_content TEXT');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN image_url TEXT');
-} catch { /* Column exists */ }
-try {
-  db.exec('ALTER TABLE messages ADD COLUMN expires_at TEXT');
-} catch { /* Column exists */ }
-
-// Create unique index for email lookups (enforces uniqueness)
-try {
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)');
-} catch { /* Index exists */ }
-
-// Prepared statements
-const stmts = {
-  // Users
-  createUser: db.prepare('INSERT OR REPLACE INTO users (id, nickname) VALUES (?, ?)'),
-  getUser: db.prepare('SELECT * FROM users WHERE id = ?'),
-  getUserByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
-  registerUser: db.prepare('INSERT INTO users (id, nickname, email, password_hash) VALUES (?, ?, ?, ?)'),
-  updateUserAuth: db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?'),
-
-  // Rooms
-  createRoom: db.prepare('INSERT INTO rooms (id, invite_code, name, type) VALUES (?, ?, ?, ?)'),
-  getRoomById: db.prepare('SELECT * FROM rooms WHERE id = ?'),
-  getRoomByInviteCode: db.prepare('SELECT * FROM rooms WHERE invite_code = ?'),
-  deleteRoom: db.prepare('DELETE FROM rooms WHERE id = ?'),
-
-  // Room members
-  addMember: db.prepare('INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)'),
-  removeMember: db.prepare('DELETE FROM room_members WHERE room_id = ? AND user_id = ?'),
-  getRoomMembers: db.prepare(`
-    SELECT u.id, u.nickname FROM users u
-    JOIN room_members rm ON u.id = rm.user_id
-    WHERE rm.room_id = ?
-  `),
-  getUserRooms: db.prepare(`
-    SELECT r.* FROM rooms r
-    JOIN room_members rm ON r.id = rm.room_id
-    WHERE rm.user_id = ?
-  `),
-  getMemberCount: db.prepare('SELECT COUNT(*) as count FROM room_members WHERE room_id = ?'),
-
-  // Messages
-  addMessage: db.prepare(`
-    INSERT INTO messages (id, room_id, user_id, nickname, content, timestamp, reply_to_id, reply_to_nickname, reply_to_content, image_url, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `),
-  deleteExpiredMessages: db.prepare(`DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < ?`),
-  getMessage: db.prepare('SELECT * FROM messages WHERE id = ?'),
-  editMessage: db.prepare('UPDATE messages SET content = ?, edited = 1, edited_at = ? WHERE id = ? AND user_id = ? AND deleted = 0'),
-  deleteMessage: db.prepare("UPDATE messages SET deleted = 1, content = '[Message deleted]' WHERE id = ? AND user_id = ?"),
-  getRoomMessages: db.prepare(`
-    SELECT * FROM messages
-    WHERE room_id = ? AND deleted = 0
-    ORDER BY timestamp DESC
-    LIMIT 100
-  `),
-
-  // Reactions
-  addReaction: db.prepare('INSERT OR IGNORE INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)'),
-  removeReaction: db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?'),
-  getMessageReactions: db.prepare('SELECT emoji, user_id FROM reactions WHERE message_id = ?'),
-};
-
-// Helper to get reactions for messages
-function getReactionsForMessage(messageId: string): Reaction[] {
-  const rows = stmts.getMessageReactions.all(messageId) as { emoji: string; user_id: string }[];
-  const reactionMap = new Map<string, string[]>();
-
-  rows.forEach(row => {
-    if (!reactionMap.has(row.emoji)) {
-      reactionMap.set(row.emoji, []);
-    }
-    reactionMap.get(row.emoji)!.push(row.user_id);
-  });
-
-  return Array.from(reactionMap.entries()).map(([emoji, users]) => ({ emoji, users }));
+// Helper to convert MongoDB document to API format
+function toUserType(doc: any): UserType {
+  return {
+    id: doc._id,
+    nickname: doc.nickname,
+    joinedAt: doc.createdAt?.toISOString() || new Date().toISOString(),
+    email: doc.email
+  };
 }
 
-interface MessageRow {
-  id: string;
-  room_id: string;
-  user_id: string;
-  nickname: string;
-  content: string;
-  timestamp: string;
-  edited: number;
-  edited_at: string | null;
-  reply_to_id: string | null;
-  reply_to_nickname: string | null;
-  reply_to_content: string | null;
-  image_url: string | null;
-  expires_at: string | null;
+function toRoomType(doc: any): RoomType {
+  return {
+    id: doc._id,
+    inviteCode: doc.inviteCode,
+    name: doc.name,
+    type: doc.type as RoomTypeEnum,
+    createdAt: doc.createdAt?.toISOString() || new Date().toISOString(),
+    memberCount: doc.members?.length || 0
+  };
 }
 
-function rowToMessage(row: MessageRow): Message {
-  const message: Message = {
-    id: row.id,
-    roomId: row.room_id,
-    userId: row.user_id,
-    nickname: row.nickname,
-    content: row.content,
-    timestamp: row.timestamp,
-    reactions: getReactionsForMessage(row.id)
+function toMessageType(doc: any): MessageType {
+  const message: MessageType = {
+    id: doc._id,
+    roomId: doc.roomId,
+    userId: doc.userId,
+    nickname: doc.nickname,
+    content: doc.content,
+    timestamp: doc.createdAt?.toISOString() || new Date().toISOString(),
+    reactions: aggregateReactions(doc.reactions || [])
   };
 
-  if (row.edited) {
+  if (doc.edited) {
     message.edited = true;
-    message.editedAt = row.edited_at || undefined;
+    message.editedAt = doc.editedAt?.toISOString();
   }
 
-  if (row.reply_to_id) {
+  if (doc.replyTo) {
     message.replyTo = {
-      id: row.reply_to_id,
-      nickname: row.reply_to_nickname || '',
-      content: row.reply_to_content || ''
+      id: doc.replyTo.messageId,
+      nickname: doc.replyTo.nickname,
+      content: doc.replyTo.content
     };
   }
 
-  if (row.image_url) {
-    message.imageUrl = row.image_url;
+  if (doc.imageUrl) {
+    message.imageUrl = doc.imageUrl;
   }
 
-  if (row.expires_at) {
-    message.expiresAt = row.expires_at;
+  if (doc.expiresAt) {
+    message.expiresAt = doc.expiresAt.toISOString();
   }
 
   return message;
 }
 
+function aggregateReactions(reactions: { emoji: string; userId: string }[]): Reaction[] {
+  const reactionMap = new Map<string, string[]>();
+
+  reactions.forEach(r => {
+    if (!reactionMap.has(r.emoji)) {
+      reactionMap.set(r.emoji, []);
+    }
+    reactionMap.get(r.emoji)!.push(r.userId);
+  });
+
+  return Array.from(reactionMap.entries()).map(([emoji, users]) => ({ emoji, users }));
+}
+
 export const database = {
   // User operations
-  createOrUpdateUser(id: string, nickname: string): User {
-    stmts.createUser.run(id, nickname);
-    return { id, nickname, joinedAt: new Date().toISOString() };
+  async createOrUpdateUser(id: string, nickname: string): Promise<UserType> {
+    const user = await User.findByIdAndUpdate(
+      id,
+      { nickname },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    return toUserType(user);
   },
 
-  getUser(id: string): User | undefined {
-    const row = stmts.getUser.get(id) as { id: string; nickname: string; created_at: string; email?: string } | undefined;
-    if (!row) return undefined;
-    return { id: row.id, nickname: row.nickname, joinedAt: row.created_at, email: row.email };
+  async getUser(id: string): Promise<UserType | undefined> {
+    const user = await User.findById(id);
+    return user ? toUserType(user) : undefined;
   },
 
-  getUserByEmail(email: string): User | undefined {
-    const row = stmts.getUserByEmail.get(email.toLowerCase()) as { id: string; nickname: string; created_at: string; email: string; password_hash: string } | undefined;
-    if (!row) return undefined;
-    return { id: row.id, nickname: row.nickname, joinedAt: row.created_at, email: row.email };
+  async getUserByEmail(email: string): Promise<UserType | undefined> {
+    const user = await User.findOne({ email: email.toLowerCase() });
+    return user ? toUserType(user) : undefined;
   },
 
-  async registerUser(id: string, nickname: string, email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
-    // Check if email already exists
-    const existing = stmts.getUserByEmail.get(email.toLowerCase());
-    if (existing) {
-      return { success: false, error: 'Email already registered' };
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
+  async registerUser(id: string, nickname: string, email: string, password: string): Promise<{ success: boolean; error?: string; user?: UserType }> {
     try {
-      console.log(`Registering user: ${nickname} with email: ${email.toLowerCase()}`);
-      const result = stmts.registerUser.run(id, nickname, email.toLowerCase(), passwordHash);
-      console.log(`Insert result: changes=${result.changes}, lastInsertRowid=${result.lastInsertRowid}`);
+      // Check if email already exists
+      const existing = await User.findOne({ email: email.toLowerCase() });
+      if (existing) {
+        return { success: false, error: 'Email already registered' };
+      }
 
-      // Verify the user was actually inserted
-      const verify = stmts.getUserByEmail.get(email.toLowerCase());
-      console.log(`Verification after insert: ${verify ? 'User found' : 'User NOT found!'}`);
+      const passwordHash = await bcrypt.hash(password, 10);
+      const user = new User({
+        _id: id,
+        nickname,
+        email: email.toLowerCase(),
+        passwordHash
+      });
+
+      await user.save();
+      console.log(`User registered: ${nickname} (${email.toLowerCase()})`);
 
       return {
         success: true,
-        user: { id, nickname, joinedAt: new Date().toISOString(), email: email.toLowerCase() }
+        user: toUserType(user)
       };
-    } catch (err) {
+    } catch (err: any) {
       console.error('Registration error:', err);
+      if (err.code === 11000) {
+        return { success: false, error: 'Email already registered' };
+      }
       return { success: false, error: 'Registration failed' };
     }
   },
 
-  async loginUser(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
-    console.log(`Login attempt for: ${email.toLowerCase()}`);
+  async loginUser(email: string, password: string): Promise<{ success: boolean; error?: string; user?: UserType }> {
+    try {
+      console.log(`Login attempt for: ${email.toLowerCase()}`);
 
-    // Debug: list all users in database
-    const allUsers = db.prepare('SELECT id, nickname, email FROM users').all();
-    console.log(`All users in database: ${JSON.stringify(allUsers)}`);
+      const user = await User.findOne({ email: email.toLowerCase() });
+      if (!user || !user.passwordHash) {
+        console.log(`User not found: ${email.toLowerCase()}`);
+        return { success: false, error: 'Invalid email or password' };
+      }
 
-    const row = stmts.getUserByEmail.get(email.toLowerCase()) as { id: string; nickname: string; created_at: string; email: string; password_hash: string } | undefined;
-    if (!row) {
-      console.log(`User not found: ${email.toLowerCase()}`);
-      return { success: false, error: 'Invalid email or password' };
+      console.log(`Found user: ${user.nickname}, checking password...`);
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        console.log(`Password mismatch for: ${email.toLowerCase()}`);
+        return { success: false, error: 'Invalid email or password' };
+      }
+
+      console.log(`Login successful for: ${user.nickname}`);
+      return {
+        success: true,
+        user: toUserType(user)
+      };
+    } catch (err) {
+      console.error('Login error:', err);
+      return { success: false, error: 'Login failed' };
     }
-    if (!row.password_hash) {
-      console.log(`User has no password: ${email.toLowerCase()}`);
-      return { success: false, error: 'Invalid email or password' };
-    }
-
-    console.log(`Found user: ${row.nickname}, checking password...`);
-    const valid = await bcrypt.compare(password, row.password_hash);
-    if (!valid) {
-      console.log(`Password mismatch for: ${email.toLowerCase()}`);
-      return { success: false, error: 'Invalid email or password' };
-    }
-
-    console.log(`Login successful for: ${row.nickname}`);
-    return {
-      success: true,
-      user: { id: row.id, nickname: row.nickname, joinedAt: row.created_at, email: row.email }
-    };
   },
 
   // Room operations
-  createRoom(id: string, inviteCode: string, name: string, type: RoomType, creatorId: string): Room {
-    const now = new Date().toISOString();
-    stmts.createRoom.run(id, inviteCode, name, type);
-    stmts.addMember.run(id, creatorId);
-    return { id, inviteCode, name, type, createdAt: now };
+  async createRoom(id: string, inviteCode: string, name: string, type: RoomTypeEnum, creatorId: string): Promise<RoomType> {
+    const room = new Room({
+      _id: id,
+      inviteCode: inviteCode.toUpperCase(),
+      name,
+      type,
+      members: [{ userId: creatorId, joinedAt: new Date() }]
+    });
+
+    await room.save();
+    return toRoomType(room);
   },
 
-  getRoomById(id: string): Room | undefined {
-    const row = stmts.getRoomById.get(id) as { id: string; invite_code: string; name: string; type: RoomType; created_at: string } | undefined;
-    if (!row) return undefined;
-    return {
-      id: row.id,
-      inviteCode: row.invite_code,
-      name: row.name,
-      type: row.type,
-      createdAt: row.created_at
-    };
+  async getRoomById(id: string): Promise<RoomType | undefined> {
+    const room = await Room.findById(id);
+    return room ? toRoomType(room) : undefined;
   },
 
-  getRoomByInviteCode(code: string): Room | undefined {
-    const row = stmts.getRoomByInviteCode.get(code.toUpperCase()) as { id: string; invite_code: string; name: string; type: RoomType; created_at: string } | undefined;
-    if (!row) return undefined;
-    return {
-      id: row.id,
-      inviteCode: row.invite_code,
-      name: row.name,
-      type: row.type,
-      createdAt: row.created_at
-    };
+  async getRoomByInviteCode(code: string): Promise<RoomType | undefined> {
+    const room = await Room.findOne({ inviteCode: code.toUpperCase() });
+    return room ? toRoomType(room) : undefined;
   },
 
-  deleteRoom(id: string): void {
-    stmts.deleteRoom.run(id);
+  async deleteRoom(id: string): Promise<void> {
+    await Room.findByIdAndDelete(id);
+    await Message.deleteMany({ roomId: id });
   },
 
   // Member operations
-  addMemberToRoom(roomId: string, userId: string): void {
-    stmts.addMember.run(roomId, userId);
+  async addMemberToRoom(roomId: string, userId: string): Promise<void> {
+    await Room.findByIdAndUpdate(roomId, {
+      $addToSet: { members: { userId, joinedAt: new Date() } }
+    });
   },
 
-  removeMemberFromRoom(roomId: string, userId: string): void {
-    stmts.removeMember.run(roomId, userId);
-    const count = stmts.getMemberCount.get(roomId) as { count: number };
-    if (count.count === 0) {
-      stmts.deleteRoom.run(roomId);
+  async removeMemberFromRoom(roomId: string, userId: string): Promise<void> {
+    const room = await Room.findByIdAndUpdate(
+      roomId,
+      { $pull: { members: { userId } } },
+      { new: true }
+    );
+
+    if (room && room.members.length === 0) {
+      await this.deleteRoom(roomId);
     }
   },
 
-  getRoomMembers(roomId: string): { id: string; nickname: string }[] {
-    return stmts.getRoomMembers.all(roomId) as { id: string; nickname: string }[];
+  async getRoomMembers(roomId: string): Promise<{ id: string; nickname: string }[]> {
+    const room = await Room.findById(roomId);
+    if (!room) return [];
+
+    const userIds = room.members.map(m => m.userId);
+    const users = await User.find({ _id: { $in: userIds } });
+
+    return users.map(u => ({ id: u._id, nickname: u.nickname }));
   },
 
-  getMemberCount(roomId: string): number {
-    const result = stmts.getMemberCount.get(roomId) as { count: number };
-    return result.count;
+  async getMemberCount(roomId: string): Promise<number> {
+    const room = await Room.findById(roomId);
+    return room?.members.length || 0;
   },
 
-  getUserRooms(userId: string): Room[] {
-    const rows = stmts.getUserRooms.all(userId) as { id: string; invite_code: string; name: string; type: RoomType; created_at: string }[];
-    return rows.map(row => ({
-      id: row.id,
-      inviteCode: row.invite_code,
-      name: row.name,
-      type: row.type,
-      createdAt: row.created_at
-    }));
+  async getUserRooms(userId: string): Promise<RoomType[]> {
+    const rooms = await Room.find({ 'members.userId': userId });
+    return rooms.map(toRoomType);
   },
 
   // Message operations
-  addMessage(
+  async addMessage(
     id: string,
     roomId: string,
     userId: string,
@@ -385,80 +244,93 @@ export const database = {
     content: string,
     replyTo?: { id: string; nickname: string; content: string },
     imageUrl?: string
-  ): Message {
-    const timestamp = new Date().toISOString();
-    // Messages expire after 2 minutes
-    const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-    stmts.addMessage.run(
-      id, roomId, userId, nickname, content, timestamp,
-      replyTo?.id || null, replyTo?.nickname || null, replyTo?.content || null,
-      imageUrl || null, expiresAt
-    );
-    return {
-      id,
+  ): Promise<MessageType> {
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
+
+    const message = new Message({
+      _id: id,
       roomId,
       userId,
       nickname,
       content,
-      timestamp,
-      expiresAt,
       imageUrl,
-      replyTo,
+      replyTo: replyTo ? {
+        messageId: replyTo.id,
+        nickname: replyTo.nickname,
+        content: replyTo.content
+      } : undefined,
+      expiresAt,
       reactions: []
-    };
+    });
+
+    await message.save();
+    return toMessageType(message);
   },
 
-  deleteExpiredMessages(): number {
-    const now = new Date().toISOString();
-    const result = stmts.deleteExpiredMessages.run(now);
-    return result.changes;
+  async deleteExpiredMessages(): Promise<number> {
+    // MongoDB TTL index handles this automatically
+    return 0;
   },
 
-  getExpiredMessageIds(): string[] {
-    const now = new Date().toISOString();
-    const rows = db.prepare(`SELECT id, room_id FROM messages WHERE expires_at IS NOT NULL AND expires_at < ? AND deleted = 0`).all(now) as { id: string; room_id: string }[];
-    return rows.map(r => r.id);
+  async getExpiredMessageIds(): Promise<string[]> {
+    const now = new Date();
+    const messages = await Message.find({
+      expiresAt: { $lte: now },
+      deleted: false
+    }).select('_id');
+    return messages.map(m => m._id);
   },
 
-  getExpiredMessagesWithRooms(): { id: string; roomId: string }[] {
-    const now = new Date().toISOString();
-    const rows = db.prepare(`SELECT id, room_id FROM messages WHERE expires_at IS NOT NULL AND expires_at < ? AND deleted = 0`).all(now) as { id: string; room_id: string }[];
-    return rows.map(r => ({ id: r.id, roomId: r.room_id }));
+  async getExpiredMessagesWithRooms(): Promise<{ id: string; roomId: string }[]> {
+    const now = new Date();
+    const messages = await Message.find({
+      expiresAt: { $lte: now },
+      deleted: false
+    }).select('_id roomId');
+    return messages.map(m => ({ id: m._id, roomId: m.roomId }));
   },
 
-  editMessage(messageId: string, userId: string, content: string): boolean {
-    const editedAt = new Date().toISOString();
-    const result = stmts.editMessage.run(content, editedAt, messageId, userId);
-    return result.changes > 0;
+  async editMessage(messageId: string, userId: string, content: string): Promise<boolean> {
+    const result = await Message.updateOne(
+      { _id: messageId, userId, deleted: false },
+      { content, edited: true, editedAt: new Date() }
+    );
+    return result.modifiedCount > 0;
   },
 
-  deleteMessage(messageId: string, userId: string): boolean {
-    const result = stmts.deleteMessage.run(messageId, userId);
-    return result.changes > 0;
+  async deleteMessage(messageId: string, userId: string): Promise<boolean> {
+    const result = await Message.updateOne(
+      { _id: messageId, userId },
+      { deleted: true, content: '[Message deleted]' }
+    );
+    return result.modifiedCount > 0;
   },
 
-  getRoomMessages(roomId: string): Message[] {
-    const rows = stmts.getRoomMessages.all(roomId) as MessageRow[];
-    return rows.map(rowToMessage).reverse();
+  async getRoomMessages(roomId: string): Promise<MessageType[]> {
+    const messages = await Message.find({ roomId, deleted: false })
+      .sort({ createdAt: -1 })
+      .limit(100);
+    return messages.map(toMessageType).reverse();
   },
 
   // Reaction operations
-  addReaction(messageId: string, userId: string, emoji: string): void {
-    stmts.addReaction.run(messageId, userId, emoji);
+  async addReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+    await Message.updateOne(
+      { _id: messageId },
+      { $addToSet: { reactions: { emoji, userId, createdAt: new Date() } } }
+    );
   },
 
-  removeReaction(messageId: string, userId: string, emoji: string): void {
-    stmts.removeReaction.run(messageId, userId, emoji);
+  async removeReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+    await Message.updateOne(
+      { _id: messageId },
+      { $pull: { reactions: { emoji, userId } } }
+    );
   },
 
   // Check if invite code exists
-  inviteCodeExists(code: string): boolean {
-    return !!stmts.getRoomByInviteCode.get(code.toUpperCase());
-  },
-
-  // Debug: list all users
-  listAllUsers(): { id: string; nickname: string; email: string | null }[] {
-    const rows = db.prepare('SELECT id, nickname, email FROM users').all() as { id: string; nickname: string; email: string | null }[];
-    return rows;
+  async inviteCodeExists(code: string): Promise<boolean> {
+    const room = await Room.findOne({ inviteCode: code.toUpperCase() });
+    return !!room;
   }
 };

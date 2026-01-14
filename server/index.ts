@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 import path from 'path';
-import { database } from './db';
+import { connectDB, database } from './db';
 import { generateInviteCode, generateId } from './invite';
 import {
   ClientMessage,
@@ -53,7 +53,7 @@ const clients: Map<WebSocket, ConnectedClient> = new Map();
 const userConnections: Map<string, Set<WebSocket>> = new Map(); // userId -> Set of connections
 
 // Typing timeout management
-const typingTimeouts: Map<string, NodeJS.Timeout> = new Map(); // `${roomId}:${oderId}` -> timeout
+const typingTimeouts: Map<string, NodeJS.Timeout> = new Map(); // `${roomId}:${userId}` -> timeout
 
 // Helper to send message to a client
 function send(ws: WebSocket, message: ServerMessage): void {
@@ -92,8 +92,8 @@ function getOnlineMembers(roomId: string): UserInfo[] {
 }
 
 // Serialize room for sending to client
-function serializeRoom(room: Room): Room {
-  const members = database.getRoomMembers(room.id);
+async function serializeRoom(room: Room): Promise<Room> {
+  const members = await database.getRoomMembers(room.id);
   const onlineMembers = getOnlineMembers(room.id);
   const onlineIds = onlineMembers.map(m => m.id);
 
@@ -173,7 +173,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
         broadcastToRoom(roomId, {
           type: 'typing',
-          payload: { roomId, oderId: userId, nickname, isTyping: false }
+          payload: { roomId, userId, nickname, isTyping: false }
         });
       });
 
@@ -198,40 +198,40 @@ wss.on('connection', (ws: WebSocket) => {
   });
 });
 
-function handleMessage(ws: WebSocket, message: ClientMessage): void {
+async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<void> {
   const client = clients.get(ws);
   if (!client) return;
 
   switch (message.type) {
     case 'register':
-      handleRegister(ws, client, message.payload as RegisterPayload);
+      await handleRegister(ws, client, message.payload as RegisterPayload);
       break;
     case 'login':
-      handleLogin(ws, client, message.payload as LoginPayload);
+      await handleLogin(ws, client, message.payload as LoginPayload);
       break;
     case 'create_room':
-      handleCreateRoom(ws, client, message.payload as CreateRoomPayload);
+      await handleCreateRoom(ws, client, message.payload as CreateRoomPayload);
       break;
     case 'join_room':
-      handleJoinRoom(ws, client, message.payload as JoinRoomPayload);
+      await handleJoinRoom(ws, client, message.payload as JoinRoomPayload);
       break;
     case 'leave_room':
-      handleLeaveRoom(ws, client, message.payload as LeaveRoomPayload);
+      await handleLeaveRoom(ws, client, message.payload as LeaveRoomPayload);
       break;
     case 'send_message':
-      handleSendMessage(ws, client, message.payload as SendMessagePayload);
+      await handleSendMessage(ws, client, message.payload as SendMessagePayload);
       break;
     case 'edit_message':
-      handleEditMessage(ws, client, message.payload as EditMessagePayload);
+      await handleEditMessage(ws, client, message.payload as EditMessagePayload);
       break;
     case 'delete_message':
-      handleDeleteMessage(ws, client, message.payload as DeleteMessagePayload);
+      await handleDeleteMessage(ws, client, message.payload as DeleteMessagePayload);
       break;
     case 'add_reaction':
-      handleAddReaction(ws, client, message.payload as ReactionPayload);
+      await handleAddReaction(ws, client, message.payload as ReactionPayload);
       break;
     case 'remove_reaction':
-      handleRemoveReaction(ws, client, message.payload as ReactionPayload);
+      await handleRemoveReaction(ws, client, message.payload as ReactionPayload);
       break;
     case 'typing_start':
       handleTypingStart(ws, client, message.payload as TypingPayload);
@@ -240,10 +240,10 @@ function handleMessage(ws: WebSocket, message: ClientMessage): void {
       handleTypingStop(ws, client, message.payload as TypingPayload);
       break;
     case 'get_rooms':
-      handleGetRooms(ws, client);
+      await handleGetRooms(ws, client);
       break;
     case 'reconnect':
-      handleReconnect(ws, client, message.payload as ReconnectPayload);
+      await handleReconnect(ws, client, message.payload as ReconnectPayload);
       break;
   }
 }
@@ -302,7 +302,7 @@ async function handleLogin(ws: WebSocket, client: ConnectedClient, payload: Logi
   trackUserConnection(result.user!.id, ws);
 
   // Get user's rooms from database
-  const rooms = database.getUserRooms(result.user!.id);
+  const rooms = await database.getUserRooms(result.user!.id);
   rooms.forEach(room => {
     client.rooms.add(room.id);
 
@@ -318,18 +318,21 @@ async function handleLogin(ws: WebSocket, client: ConnectedClient, payload: Logi
     }
   });
 
+  // Serialize rooms with member info
+  const serializedRooms = await Promise.all(rooms.map(serializeRoom));
+
   send(ws, {
     type: 'logged_in',
     payload: {
       user: { id: client.user.id, nickname: client.user.nickname, email: client.user.email, avatar: getAvatarColor(client.user.id) },
-      rooms: rooms.map(serializeRoom)
+      rooms: serializedRooms
     }
   });
 
   console.log(`User logged in: ${result.user!.nickname} (${email}) with ${rooms.length} rooms`);
 }
 
-function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: CreateRoomPayload): void {
+async function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: CreateRoomPayload): Promise<void> {
   const { name, type, nickname, userId } = payload;
 
   if (!name || !nickname) {
@@ -339,23 +342,25 @@ function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: Creat
 
   // Create or reuse user
   const id = userId || generateId();
-  client.user = database.createOrUpdateUser(id, nickname);
+  client.user = await database.createOrUpdateUser(id, nickname);
   trackUserConnection(id, ws);
 
   // Generate unique invite code
   let inviteCode = generateInviteCode();
-  while (database.inviteCodeExists(inviteCode)) {
+  while (await database.inviteCodeExists(inviteCode)) {
     inviteCode = generateInviteCode();
   }
 
   const roomId = generateId();
-  const room = database.createRoom(roomId, inviteCode, name, type, client.user.id);
+  const room = await database.createRoom(roomId, inviteCode, name, type, client.user.id);
   client.rooms.add(room.id);
+
+  const serializedRoom = await serializeRoom(room);
 
   send(ws, {
     type: 'room_created',
     payload: {
-      room: serializeRoom(room),
+      room: serializedRoom,
       user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(client.user.id) }
     }
   });
@@ -363,7 +368,7 @@ function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: Creat
   console.log(`Room created: ${room.name} (${room.inviteCode}) by ${nickname}`);
 }
 
-function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoomPayload): void {
+async function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoomPayload): Promise<void> {
   const { inviteCode, nickname, userId } = payload;
 
   if (!inviteCode || !nickname) {
@@ -371,7 +376,7 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
     return;
   }
 
-  const room = database.getRoomByInviteCode(inviteCode);
+  const room = await database.getRoomByInviteCode(inviteCode);
   if (!room) {
     send(ws, { type: 'error', payload: { message: 'Invalid invite code' } });
     return;
@@ -380,7 +385,7 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
   // Create or reuse user
   const id = userId || generateId();
   const wasOnline = isUserOnline(id);
-  client.user = database.createOrUpdateUser(id, nickname);
+  client.user = await database.createOrUpdateUser(id, nickname);
   trackUserConnection(id, ws);
 
   // Check if already in room (in this session)
@@ -390,26 +395,29 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
   }
 
   // Add user to room in database
-  database.addMemberToRoom(room.id, client.user.id);
+  await database.addMemberToRoom(room.id, client.user.id);
   client.rooms.add(room.id);
 
   const userInfo = { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(client.user.id) };
+
+  const serializedRoom = await serializeRoom(room);
 
   // Send room info to joining user
   send(ws, {
     type: 'room_joined',
     payload: {
-      room: serializeRoom(room),
+      room: serializedRoom,
       user: userInfo
     }
   });
 
   // Send message history
+  const messages = await database.getRoomMessages(room.id);
   send(ws, {
     type: 'room_history',
     payload: {
       roomId: room.id,
-      messages: database.getRoomMessages(room.id)
+      messages
     }
   });
 
@@ -430,7 +438,7 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
   console.log(`${nickname} joined room: ${room.name}`);
 }
 
-function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveRoomPayload): void {
+async function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveRoomPayload): Promise<void> {
   const { roomId } = payload;
 
   if (!client.user || !client.rooms.has(roomId)) {
@@ -439,7 +447,7 @@ function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveR
   }
 
   // Remove from database
-  database.removeMemberFromRoom(roomId, client.user.id);
+  await database.removeMemberFromRoom(roomId, client.user.id);
   client.rooms.delete(roomId);
 
   // Clear typing
@@ -462,7 +470,7 @@ function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveR
   console.log(`${client.user.nickname} left room: ${roomId}`);
 }
 
-function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: SendMessagePayload): void {
+async function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: SendMessagePayload): Promise<void> {
   const { roomId, content, replyTo, imageUrl } = payload;
 
   if (!client.user) {
@@ -488,7 +496,7 @@ function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: Send
   handleTypingStop(ws, client, { roomId });
 
   const messageId = generateId();
-  const message = database.addMessage(
+  const message = await database.addMessage(
     messageId,
     roomId,
     client.user.id,
@@ -505,7 +513,7 @@ function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: Send
   });
 }
 
-function handleEditMessage(ws: WebSocket, client: ConnectedClient, payload: EditMessagePayload): void {
+async function handleEditMessage(ws: WebSocket, client: ConnectedClient, payload: EditMessagePayload): Promise<void> {
   const { messageId, roomId, content } = payload;
 
   if (!client.user) {
@@ -518,7 +526,7 @@ function handleEditMessage(ws: WebSocket, client: ConnectedClient, payload: Edit
     return;
   }
 
-  const updated = database.editMessage(messageId, client.user.id, content.trim());
+  const updated = await database.editMessage(messageId, client.user.id, content.trim());
   if (!updated) {
     send(ws, { type: 'error', payload: { message: 'Cannot edit this message' } });
     return;
@@ -530,7 +538,7 @@ function handleEditMessage(ws: WebSocket, client: ConnectedClient, payload: Edit
   });
 }
 
-function handleDeleteMessage(ws: WebSocket, client: ConnectedClient, payload: DeleteMessagePayload): void {
+async function handleDeleteMessage(ws: WebSocket, client: ConnectedClient, payload: DeleteMessagePayload): Promise<void> {
   const { messageId, roomId } = payload;
 
   if (!client.user) {
@@ -538,7 +546,7 @@ function handleDeleteMessage(ws: WebSocket, client: ConnectedClient, payload: De
     return;
   }
 
-  const deleted = database.deleteMessage(messageId, client.user.id);
+  const deleted = await database.deleteMessage(messageId, client.user.id);
   if (!deleted) {
     send(ws, { type: 'error', payload: { message: 'Cannot delete this message' } });
     return;
@@ -550,7 +558,7 @@ function handleDeleteMessage(ws: WebSocket, client: ConnectedClient, payload: De
   });
 }
 
-function handleAddReaction(ws: WebSocket, client: ConnectedClient, payload: ReactionPayload): void {
+async function handleAddReaction(ws: WebSocket, client: ConnectedClient, payload: ReactionPayload): Promise<void> {
   const { messageId, roomId, emoji } = payload;
 
   if (!client.user) {
@@ -558,15 +566,15 @@ function handleAddReaction(ws: WebSocket, client: ConnectedClient, payload: Reac
     return;
   }
 
-  database.addReaction(messageId, client.user.id, emoji);
+  await database.addReaction(messageId, client.user.id, emoji);
 
   broadcastToRoom(roomId, {
     type: 'reaction_added',
-    payload: { messageId, roomId, oderId: client.user.id, emoji }
+    payload: { messageId, roomId, userId: client.user.id, emoji }
   });
 }
 
-function handleRemoveReaction(ws: WebSocket, client: ConnectedClient, payload: ReactionPayload): void {
+async function handleRemoveReaction(ws: WebSocket, client: ConnectedClient, payload: ReactionPayload): Promise<void> {
   const { messageId, roomId, emoji } = payload;
 
   if (!client.user) {
@@ -574,11 +582,11 @@ function handleRemoveReaction(ws: WebSocket, client: ConnectedClient, payload: R
     return;
   }
 
-  database.removeReaction(messageId, client.user.id, emoji);
+  await database.removeReaction(messageId, client.user.id, emoji);
 
   broadcastToRoom(roomId, {
     type: 'reaction_removed',
-    payload: { messageId, roomId, oderId: client.user.id, emoji }
+    payload: { messageId, roomId, userId: client.user.id, emoji }
   });
 }
 
@@ -598,7 +606,7 @@ function handleTypingStart(ws: WebSocket, client: ConnectedClient, payload: Typi
     client.typingIn.add(roomId);
     broadcastToRoom(roomId, {
       type: 'typing',
-      payload: { roomId, oderId: client.user.id, nickname: client.user.nickname, isTyping: true }
+      payload: { roomId, userId: client.user.id, nickname: client.user.nickname, isTyping: true }
     }, ws);
   }
 
@@ -626,22 +634,23 @@ function handleTypingStop(ws: WebSocket, client: ConnectedClient, payload: Typin
     client.typingIn.delete(roomId);
     broadcastToRoom(roomId, {
       type: 'typing',
-      payload: { roomId, oderId: client.user.id, nickname: client.user.nickname, isTyping: false }
+      payload: { roomId, userId: client.user.id, nickname: client.user.nickname, isTyping: false }
     }, ws);
   }
 }
 
-function handleGetRooms(ws: WebSocket, client: ConnectedClient): void {
+async function handleGetRooms(ws: WebSocket, client: ConnectedClient): Promise<void> {
   if (!client.user) {
     send(ws, { type: 'room_list', payload: { rooms: [] } });
     return;
   }
 
-  const rooms = database.getUserRooms(client.user.id).map(serializeRoom);
-  send(ws, { type: 'room_list', payload: { rooms } });
+  const rooms = await database.getUserRooms(client.user.id);
+  const serializedRooms = await Promise.all(rooms.map(serializeRoom));
+  send(ws, { type: 'room_list', payload: { rooms: serializedRooms } });
 }
 
-function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: ReconnectPayload): void {
+async function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: ReconnectPayload): Promise<void> {
   const { userId, nickname } = payload;
 
   if (!userId || !nickname) {
@@ -652,11 +661,11 @@ function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: Reconn
   const wasOnline = isUserOnline(userId);
 
   // Get or create user
-  client.user = database.createOrUpdateUser(userId, nickname);
+  client.user = await database.createOrUpdateUser(userId, nickname);
   trackUserConnection(userId, ws);
 
   // Get user's rooms from database
-  const rooms = database.getUserRooms(userId);
+  const rooms = await database.getUserRooms(userId);
   rooms.forEach(room => {
     client.rooms.add(room.id);
 
@@ -672,11 +681,13 @@ function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: Reconn
     }
   });
 
+  const serializedRooms = await Promise.all(rooms.map(serializeRoom));
+
   send(ws, {
     type: 'reconnected',
     payload: {
       user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(userId) },
-      rooms: rooms.map(serializeRoom)
+      rooms: serializedRooms
     }
   });
 
@@ -687,42 +698,58 @@ const PORT = process.env.PORT || 4545;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // Clean up expired messages every 10 seconds
-const messageCleanupInterval = setInterval(() => {
-  const expiredMessages = database.getExpiredMessagesWithRooms();
+const messageCleanupInterval = setInterval(async () => {
+  try {
+    const expiredMessages = await database.getExpiredMessagesWithRooms();
 
-  if (expiredMessages.length > 0) {
-    // Group by room for efficient broadcasting
-    const messagesByRoom = new Map<string, string[]>();
-    expiredMessages.forEach(({ id, roomId }) => {
-      if (!messagesByRoom.has(roomId)) {
-        messagesByRoom.set(roomId, []);
-      }
-      messagesByRoom.get(roomId)!.push(id);
-    });
+    if (expiredMessages.length > 0) {
+      // Group by room for efficient broadcasting
+      const messagesByRoom = new Map<string, string[]>();
+      expiredMessages.forEach(({ id, roomId }) => {
+        if (!messagesByRoom.has(roomId)) {
+          messagesByRoom.set(roomId, []);
+        }
+        messagesByRoom.get(roomId)!.push(id);
+      });
 
-    // Delete from database
-    const deletedCount = database.deleteExpiredMessages();
+      // Delete from database (MongoDB TTL handles this, but we still broadcast)
+      const deletedCount = await database.deleteExpiredMessages();
 
-    // Broadcast deletions to rooms
-    messagesByRoom.forEach((messageIds, roomId) => {
-      messageIds.forEach(messageId => {
-        broadcastToRoom(roomId, {
-          type: 'message_deleted',
-          payload: { messageId, roomId }
+      // Broadcast deletions to rooms
+      messagesByRoom.forEach((messageIds, roomId) => {
+        messageIds.forEach(messageId => {
+          broadcastToRoom(roomId, {
+            type: 'message_deleted',
+            payload: { messageId, roomId }
+          });
         });
       });
-    });
 
-    if (deletedCount > 0) {
-      console.log(`Cleaned up ${deletedCount} expired messages`);
+      if (expiredMessages.length > 0) {
+        console.log(`Cleaned up ${expiredMessages.length} expired messages`);
+      }
     }
+  } catch (err) {
+    console.error('Error cleaning up expired messages:', err);
   }
 }, 10000);
 
-server.listen(Number(PORT), HOST, () => {
-  console.log(`Chat server running on http://${HOST}:${PORT}`);
-  console.log('Messages will auto-delete after 2 minutes');
-});
+// Start server after connecting to MongoDB
+async function startServer() {
+  try {
+    await connectDB();
+
+    server.listen(Number(PORT), HOST, () => {
+      console.log(`Chat server running on http://${HOST}:${PORT}`);
+      console.log('Messages will auto-delete after 2 minutes');
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 // Graceful shutdown
 const shutdown = () => {
