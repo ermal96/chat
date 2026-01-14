@@ -344,6 +344,129 @@ input::placeholder {
   margin-top: 12px;
 }
 
+/* Auth Forms */
+.auth-form {
+  max-width: 360px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 16px 18px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  color: var(--text-primary);
+  transition: var(--transition);
+}
+
+.auth-form input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.auth-form .btn {
+  margin-top: 8px;
+}
+
+.auth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.btn.large {
+  padding: 18px 32px;
+  font-size: 16px;
+}
+
+.btn.outline {
+  background: transparent;
+  border: 2px solid var(--border);
+  color: var(--text-primary);
+}
+
+.btn.outline:hover {
+  border-color: var(--primary);
+  background: var(--bg-hover);
+}
+
+.back-btn {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  transition: var(--transition);
+}
+
+.back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+.switch-mode {
+  margin-top: 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  transition: var(--transition);
+}
+
+.link-btn:hover {
+  color: var(--primary-light);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 8px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  margin: 0 16px;
+}
+
+.info-text {
+  margin-top: 32px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.welcome-container p {
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+
 /* Chat Layout */
 .chat-screen {
   height: 100%;

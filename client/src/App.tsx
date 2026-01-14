@@ -9,6 +9,7 @@ import type { Room, Message, ServerMessage } from '../../shared/types';
 interface UserData {
   id: string;
   nickname: string;
+  email?: string;
 }
 
 export interface ToastMessage {
@@ -76,10 +77,32 @@ export default function App() {
 
   const handleMessage = useCallback((msg: ServerMessage) => {
     switch (msg.type) {
+      case 'registered': {
+        const payload = msg.payload as { user: { id: string; nickname: string; email: string } };
+        setUser({ id: payload.user.id, nickname: payload.user.nickname, email: payload.user.email });
+        currentUserIdRef.current = payload.user.id;
+        showToast('Account created successfully!', 'success');
+        break;
+      }
+
+      case 'logged_in': {
+        const payload = msg.payload as { user: { id: string; nickname: string; email: string }; rooms: Room[] };
+        setUser({ id: payload.user.id, nickname: payload.user.nickname, email: payload.user.email });
+        currentUserIdRef.current = payload.user.id;
+        const roomMap = new Map<string, Room>();
+        payload.rooms.forEach(r => roomMap.set(r.id, r));
+        setRooms(roomMap);
+        if (payload.rooms.length > 0) {
+          setCurrentRoom(payload.rooms[0]);
+        }
+        showToast(`Welcome back, ${payload.user.nickname}!`, 'success');
+        break;
+      }
+
       case 'room_created':
       case 'room_joined': {
         const payload = msg.payload as { room: Room; user: { id: string; nickname: string } };
-        setUser({ id: payload.user.id, nickname: payload.user.nickname });
+        setUser(prev => prev ? { ...prev, id: payload.user.id, nickname: payload.user.nickname } : { id: payload.user.id, nickname: payload.user.nickname });
         currentUserIdRef.current = payload.user.id;
         setRooms(prev => new Map(prev).set(payload.room.id, payload.room));
         setCurrentRoom(payload.room);
@@ -288,6 +311,14 @@ export default function App() {
     }
   }, [connected, user, send]);
 
+  const handleRegister = (email: string, password: string, nickname: string) => {
+    send('register', { email, password, nickname });
+  };
+
+  const handleLogin = (email: string, password: string) => {
+    send('login', { email, password });
+  };
+
   const handleCreateRoom = (nickname: string, roomName: string, roomType: 'group' | 'direct') => {
     send('create_room', { name: roomName, type: roomType, nickname, userId: user?.id });
   };
@@ -384,7 +415,8 @@ export default function App() {
     currentUserIdRef.current = null;
   };
 
-  const isLoggedIn = user && rooms.size > 0;
+  // User is logged in if they have an email (registered) or have rooms (guest with active session)
+  const isLoggedIn = user && (user.email || rooms.size > 0);
 
   return (
     <div className="app">
@@ -392,7 +424,10 @@ export default function App() {
         <WelcomeScreen
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          onRegister={handleRegister}
+          onLogin={handleLogin}
           savedNickname={user?.nickname}
+          savedEmail={user?.email}
         />
       ) : (
         <ChatScreen

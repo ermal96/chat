@@ -18,6 +18,7 @@ export interface User {
   id: string;
   nickname: string;
   joinedAt: string;
+  email?: string;
   avatar?: string; // Color for avatar
 }
 
@@ -54,6 +55,8 @@ export interface Message {
 
 // WebSocket message types
 export type ClientMessageType =
+  | 'register'
+  | 'login'
   | 'create_room'
   | 'join_room'
   | 'leave_room'
@@ -69,6 +72,8 @@ export type ClientMessageType =
   | 'mark_read';
 
 export type ServerMessageType =
+  | 'registered'
+  | 'logged_in'
   | 'room_created'
   | 'room_joined'
   | 'room_left'
@@ -157,6 +162,17 @@ export interface ReconnectPayload {
 
 export interface MarkReadPayload {
   roomId: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  nickname: string;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
 }
 
 // Avatar colors

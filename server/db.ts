@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import bcrypt from 'bcryptjs';
 import { Room, User, Message, RoomType, Reaction } from '../shared/types';
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, '../../data/chat.db');
@@ -71,6 +72,12 @@ db.exec(`
 
 // Add columns if they don't exist (for migration)
 try {
+  db.exec('ALTER TABLE users ADD COLUMN email TEXT UNIQUE');
+} catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+} catch { /* Column exists */ }
+try {
   db.exec('ALTER TABLE messages ADD COLUMN edited INTEGER DEFAULT 0');
 } catch { /* Column exists */ }
 try {
@@ -95,11 +102,19 @@ try {
   db.exec('ALTER TABLE messages ADD COLUMN expires_at TEXT');
 } catch { /* Column exists */ }
 
+// Create index for email lookups
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+} catch { /* Index exists */ }
+
 // Prepared statements
 const stmts = {
   // Users
   createUser: db.prepare('INSERT OR REPLACE INTO users (id, nickname) VALUES (?, ?)'),
   getUser: db.prepare('SELECT * FROM users WHERE id = ?'),
+  getUserByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
+  registerUser: db.prepare('INSERT INTO users (id, nickname, email, password_hash) VALUES (?, ?, ?, ?)'),
+  updateUserAuth: db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?'),
 
   // Rooms
   createRoom: db.prepare('INSERT INTO rooms (id, invite_code, name, type) VALUES (?, ?, ?, ?)'),
@@ -218,9 +233,51 @@ export const database = {
   },
 
   getUser(id: string): User | undefined {
-    const row = stmts.getUser.get(id) as { id: string; nickname: string; created_at: string } | undefined;
+    const row = stmts.getUser.get(id) as { id: string; nickname: string; created_at: string; email?: string } | undefined;
     if (!row) return undefined;
-    return { id: row.id, nickname: row.nickname, joinedAt: row.created_at };
+    return { id: row.id, nickname: row.nickname, joinedAt: row.created_at, email: row.email };
+  },
+
+  getUserByEmail(email: string): User | undefined {
+    const row = stmts.getUserByEmail.get(email.toLowerCase()) as { id: string; nickname: string; created_at: string; email: string; password_hash: string } | undefined;
+    if (!row) return undefined;
+    return { id: row.id, nickname: row.nickname, joinedAt: row.created_at, email: row.email };
+  },
+
+  async registerUser(id: string, nickname: string, email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
+    // Check if email already exists
+    const existing = stmts.getUserByEmail.get(email.toLowerCase());
+    if (existing) {
+      return { success: false, error: 'Email already registered' };
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    try {
+      stmts.registerUser.run(id, nickname, email.toLowerCase(), passwordHash);
+      return {
+        success: true,
+        user: { id, nickname, joinedAt: new Date().toISOString(), email: email.toLowerCase() }
+      };
+    } catch (err) {
+      return { success: false, error: 'Registration failed' };
+    }
+  },
+
+  async loginUser(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
+    const row = stmts.getUserByEmail.get(email.toLowerCase()) as { id: string; nickname: string; created_at: string; email: string; password_hash: string } | undefined;
+    if (!row || !row.password_hash) {
+      return { success: false, error: 'Invalid email or password' };
+    }
+
+    const valid = await bcrypt.compare(password, row.password_hash);
+    if (!valid) {
+      return { success: false, error: 'Invalid email or password' };
+    }
+
+    return {
+      success: true,
+      user: { id: row.id, nickname: row.nickname, joinedAt: row.created_at, email: row.email }
+    };
   },
 
   // Room operations

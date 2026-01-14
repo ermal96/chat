@@ -16,6 +16,8 @@ import {
   TypingPayload,
   LeaveRoomPayload,
   ReconnectPayload,
+  RegisterPayload,
+  LoginPayload,
   User,
   Room,
   UserInfo,
@@ -201,6 +203,12 @@ function handleMessage(ws: WebSocket, message: ClientMessage): void {
   if (!client) return;
 
   switch (message.type) {
+    case 'register':
+      handleRegister(ws, client, message.payload as RegisterPayload);
+      break;
+    case 'login':
+      handleLogin(ws, client, message.payload as LoginPayload);
+      break;
     case 'create_room':
       handleCreateRoom(ws, client, message.payload as CreateRoomPayload);
       break;
@@ -238,6 +246,87 @@ function handleMessage(ws: WebSocket, message: ClientMessage): void {
       handleReconnect(ws, client, message.payload as ReconnectPayload);
       break;
   }
+}
+
+async function handleRegister(ws: WebSocket, client: ConnectedClient, payload: RegisterPayload): Promise<void> {
+  const { email, password, nickname } = payload;
+
+  if (!email || !password || !nickname) {
+    send(ws, { type: 'error', payload: { message: 'Email, password, and nickname are required' } });
+    return;
+  }
+
+  if (password.length < 6) {
+    send(ws, { type: 'error', payload: { message: 'Password must be at least 6 characters' } });
+    return;
+  }
+
+  const id = generateId();
+  const result = await database.registerUser(id, nickname, email, password);
+
+  if (!result.success) {
+    send(ws, { type: 'error', payload: { message: result.error || 'Registration failed' } });
+    return;
+  }
+
+  client.user = result.user!;
+  trackUserConnection(id, ws);
+
+  send(ws, {
+    type: 'registered',
+    payload: {
+      user: { id: client.user.id, nickname: client.user.nickname, email: client.user.email, avatar: getAvatarColor(id) }
+    }
+  });
+
+  console.log(`User registered: ${nickname} (${email})`);
+}
+
+async function handleLogin(ws: WebSocket, client: ConnectedClient, payload: LoginPayload): Promise<void> {
+  const { email, password } = payload;
+
+  if (!email || !password) {
+    send(ws, { type: 'error', payload: { message: 'Email and password are required' } });
+    return;
+  }
+
+  const result = await database.loginUser(email, password);
+
+  if (!result.success) {
+    send(ws, { type: 'error', payload: { message: result.error || 'Login failed' } });
+    return;
+  }
+
+  const wasOnline = isUserOnline(result.user!.id);
+  client.user = result.user!;
+  trackUserConnection(result.user!.id, ws);
+
+  // Get user's rooms from database
+  const rooms = database.getUserRooms(result.user!.id);
+  rooms.forEach(room => {
+    client.rooms.add(room.id);
+
+    // If user just came online, notify room members
+    if (!wasOnline) {
+      broadcastToRoom(room.id, {
+        type: 'user_online',
+        payload: {
+          roomId: room.id,
+          user: { id: result.user!.id, nickname: result.user!.nickname, avatar: getAvatarColor(result.user!.id) }
+        }
+      }, ws);
+    }
+  });
+
+  send(ws, {
+    type: 'logged_in',
+    payload: {
+      user: { id: client.user.id, nickname: client.user.nickname, email: client.user.email, avatar: getAvatarColor(client.user.id) },
+      rooms: rooms.map(serializeRoom)
+    }
+  });
+
+  console.log(`User logged in: ${result.user!.nickname} (${email}) with ${rooms.length} rooms`);
 }
 
 function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: CreateRoomPayload): void {
