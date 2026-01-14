@@ -4,7 +4,15 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ChatScreen } from './components/ChatScreen';
 import { Toast } from './components/Toast';
+import { Confetti } from './components/Confetti';
 import type { Room, Message, ServerMessage } from '../../shared/types';
+
+// Check if message should trigger confetti
+const CELEBRATION_TRIGGERS = ['🎉', '🎊', '🥳', 'congrats', 'congratulations', 'celebrate', 'party', 'woohoo', 'yay', 'winner', 'won'];
+function shouldTriggerConfetti(content: string): boolean {
+  const lowerContent = content.toLowerCase();
+  return CELEBRATION_TRIGGERS.some(trigger => lowerContent.includes(trigger));
+}
 
 interface UserData {
   id: string;
@@ -105,6 +113,7 @@ export default function App() {
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser[]>>(new Map());
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   // Track if we've already sent reconnect for this connection
   const hasReconnectedRef = useRef(false);
@@ -199,6 +208,11 @@ export default function App() {
               ? payload.message.content.slice(0, 100) + '...'
               : payload.message.content
           );
+        }
+
+        // Trigger confetti for celebration messages
+        if (shouldTriggerConfetti(payload.message.content)) {
+          setShowConfetti(true);
         }
         break;
       }
@@ -655,6 +669,7 @@ export default function App() {
           <Toast key={toast.id} message={toast.message} type={toast.type} />
         ))}
       </div>
+      <Confetti active={showConfetti} onComplete={() => setShowConfetti(false)} />
     </div>
   );
 }
