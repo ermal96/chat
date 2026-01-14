@@ -5,42 +5,40 @@ interface GifPickerProps {
   onClose: () => void;
 }
 
-interface GiphyGif {
+interface TenorGif {
   id: string;
-  images: {
-    fixed_height: {
+  media_formats: {
+    gif: {
       url: string;
-      width: string;
-      height: string;
     };
-    original: {
+    tinygif: {
       url: string;
     };
   };
-  title: string;
+  content_description: string;
 }
 
-// Giphy API key - public beta key for development
-const GIPHY_API_KEY = 'dc6zaTOxFJmzC';
-const GIPHY_API_BASE = 'https://api.giphy.com/v1/gifs';
+// Tenor API - free tier, no key required for limited usage
+const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Google's public Tenor key
+const TENOR_API_BASE = 'https://tenor.googleapis.com/v2';
 
 const CATEGORIES = ['Trending', 'Reactions', 'Funny', 'Love', 'Celebrate', 'Animals', 'Memes', 'Fail'];
 
 export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [gifs, setGifs] = useState<GiphyGif[]>([]);
+  const [gifs, setGifs] = useState<TenorGif[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('Trending');
 
-  // Fetch trending GIFs
+  // Fetch featured/trending GIFs
   const fetchTrending = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `${GIPHY_API_BASE}/trending?api_key=${GIPHY_API_KEY}&limit=24&rating=g`
+        `${TENOR_API_BASE}/featured?key=${TENOR_API_KEY}&limit=24&media_filter=gif,tinygif&contentfilter=medium`
       );
       const data = await response.json();
-      setGifs(data.data || []);
+      setGifs(data.results || []);
     } catch (error) {
       console.error('Failed to fetch trending GIFs:', error);
       setGifs([]);
@@ -57,10 +55,10 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
     setLoading(true);
     try {
       const response = await fetch(
-        `${GIPHY_API_BASE}/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(query)}&limit=24&rating=g`
+        `${TENOR_API_BASE}/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(query)}&limit=24&media_filter=gif,tinygif&contentfilter=medium`
       );
       const data = await response.json();
-      setGifs(data.data || []);
+      setGifs(data.results || []);
     } catch (error) {
       console.error('Failed to search GIFs:', error);
       setGifs([]);
@@ -96,8 +94,8 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   };
 
   // Handle GIF selection
-  const handleGifClick = (gif: GiphyGif) => {
-    onSelect(gif.images.original.url);
+  const handleGifClick = (gif: TenorGif) => {
+    onSelect(gif.media_formats.gif.url);
   };
 
   return (
@@ -176,11 +174,11 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
               key={gif.id}
               className="gif-item"
               onClick={() => handleGifClick(gif)}
-              title={gif.title}
+              title={gif.content_description}
             >
               <img
-                src={gif.images.fixed_height.url}
-                alt={gif.title}
+                src={gif.media_formats.tinygif.url}
+                alt={gif.content_description}
                 loading="lazy"
                 style={{
                   width: '100%',
@@ -193,7 +191,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
         )}
       </div>
 
-      {/* Powered by Giphy */}
+      {/* Powered by Tenor */}
       <div style={{
         marginTop: '8px',
         textAlign: 'center',
@@ -201,7 +199,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
         color: 'var(--text-tertiary)',
         opacity: 0.7
       }}>
-        Powered by GIPHY
+        Powered by Tenor
       </div>
     </div>
   );
