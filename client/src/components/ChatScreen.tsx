@@ -20,7 +20,7 @@ interface ChatScreenProps {
   typingUsers: TypingUser[];
   replyingTo: Message | null;
   onSelectRoom: (room: Room) => void;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string, imageUrl?: string) => void;
   onEditMessage: (messageId: string, content: string) => void;
   onDeleteMessage: (messageId: string) => void;
   onAddReaction: (messageId: string, emoji: string) => void;

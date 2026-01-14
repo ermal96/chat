@@ -296,11 +296,12 @@ export default function App() {
     send('join_room', { inviteCode, nickname, userId: user?.id });
   };
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = (content: string, imageUrl?: string) => {
     if (currentRoom) {
-      const payload: { roomId: string; content: string; replyTo?: { id: string; nickname: string; content: string } } = {
+      const payload: { roomId: string; content: string; imageUrl?: string; replyTo?: { id: string; nickname: string; content: string } } = {
         roomId: currentRoom.id,
-        content
+        content,
+        imageUrl
       };
       if (replyingTo) {
         payload.replyTo = {

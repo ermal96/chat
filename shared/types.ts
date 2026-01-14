@@ -40,6 +40,8 @@ export interface Message {
   nickname: string;
   content: string;
   timestamp: string;
+  expiresAt?: string; // Message expiration time (2 min after creation)
+  imageUrl?: string; // Image or GIF URL
   edited?: boolean;
   editedAt?: string;
   replyTo?: {
@@ -114,6 +116,7 @@ export interface JoinRoomPayload {
 export interface SendMessagePayload {
   roomId: string;
   content: string;
+  imageUrl?: string; // Image or GIF URL
   replyTo?: {
     id: string;
     nickname: string;

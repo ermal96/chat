@@ -88,6 +88,12 @@ try {
 try {
   db.exec('ALTER TABLE messages ADD COLUMN reply_to_content TEXT');
 } catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN image_url TEXT');
+} catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN expires_at TEXT');
+} catch { /* Column exists */ }
 
 // Prepared statements
 const stmts = {
@@ -118,9 +124,10 @@ const stmts = {
 
   // Messages
   addMessage: db.prepare(`
-    INSERT INTO messages (id, room_id, user_id, nickname, content, timestamp, reply_to_id, reply_to_nickname, reply_to_content)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO messages (id, room_id, user_id, nickname, content, timestamp, reply_to_id, reply_to_nickname, reply_to_content, image_url, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
+  deleteExpiredMessages: db.prepare(`DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < ?`),
   getMessage: db.prepare('SELECT * FROM messages WHERE id = ?'),
   editMessage: db.prepare('UPDATE messages SET content = ?, edited = 1, edited_at = ? WHERE id = ? AND user_id = ? AND deleted = 0'),
   deleteMessage: db.prepare("UPDATE messages SET deleted = 1, content = '[Message deleted]' WHERE id = ? AND user_id = ?"),
@@ -164,6 +171,8 @@ interface MessageRow {
   reply_to_id: string | null;
   reply_to_nickname: string | null;
   reply_to_content: string | null;
+  image_url: string | null;
+  expires_at: string | null;
 }
 
 function rowToMessage(row: MessageRow): Message {
@@ -188,6 +197,14 @@ function rowToMessage(row: MessageRow): Message {
       nickname: row.reply_to_nickname || '',
       content: row.reply_to_content || ''
     };
+  }
+
+  if (row.image_url) {
+    message.imageUrl = row.image_url;
+  }
+
+  if (row.expires_at) {
+    message.expiresAt = row.expires_at;
   }
 
   return message;
@@ -282,12 +299,16 @@ export const database = {
     userId: string,
     nickname: string,
     content: string,
-    replyTo?: { id: string; nickname: string; content: string }
+    replyTo?: { id: string; nickname: string; content: string },
+    imageUrl?: string
   ): Message {
     const timestamp = new Date().toISOString();
+    // Messages expire after 2 minutes
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
     stmts.addMessage.run(
       id, roomId, userId, nickname, content, timestamp,
-      replyTo?.id || null, replyTo?.nickname || null, replyTo?.content || null
+      replyTo?.id || null, replyTo?.nickname || null, replyTo?.content || null,
+      imageUrl || null, expiresAt
     );
     return {
       id,
@@ -296,9 +317,29 @@ export const database = {
       nickname,
       content,
       timestamp,
+      expiresAt,
+      imageUrl,
       replyTo,
       reactions: []
     };
+  },
+
+  deleteExpiredMessages(): number {
+    const now = new Date().toISOString();
+    const result = stmts.deleteExpiredMessages.run(now);
+    return result.changes;
+  },
+
+  getExpiredMessageIds(): string[] {
+    const now = new Date().toISOString();
+    const rows = db.prepare(`SELECT id, room_id FROM messages WHERE expires_at IS NOT NULL AND expires_at < ? AND deleted = 0`).all(now) as { id: string; room_id: string }[];
+    return rows.map(r => r.id);
+  },
+
+  getExpiredMessagesWithRooms(): { id: string; roomId: string }[] {
+    const now = new Date().toISOString();
+    const rows = db.prepare(`SELECT id, room_id FROM messages WHERE expires_at IS NOT NULL AND expires_at < ? AND deleted = 0`).all(now) as { id: string; room_id: string }[];
+    return rows.map(r => ({ id: r.id, roomId: r.room_id }));
   },
 
   editMessage(messageId: string, userId: string, content: string): boolean {

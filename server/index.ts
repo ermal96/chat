@@ -374,7 +374,7 @@ function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveR
 }
 
 function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: SendMessagePayload): void {
-  const { roomId, content, replyTo } = payload;
+  const { roomId, content, replyTo, imageUrl } = payload;
 
   if (!client.user) {
     send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
@@ -386,7 +386,11 @@ function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: Send
     return;
   }
 
-  if (!content || content.trim().length === 0) {
+  // Either content or image is required
+  const hasContent = content && content.trim().length > 0;
+  const hasImage = imageUrl && imageUrl.trim().length > 0;
+
+  if (!hasContent && !hasImage) {
     send(ws, { type: 'error', payload: { message: 'Message cannot be empty' } });
     return;
   }
@@ -395,7 +399,15 @@ function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: Send
   handleTypingStop(ws, client, { roomId });
 
   const messageId = generateId();
-  const message = database.addMessage(messageId, roomId, client.user.id, client.user.nickname, content.trim(), replyTo);
+  const message = database.addMessage(
+    messageId,
+    roomId,
+    client.user.id,
+    client.user.nickname,
+    content?.trim() || '',
+    replyTo,
+    imageUrl?.trim()
+  );
 
   // Broadcast to all room members including sender
   broadcastToRoom(roomId, {
@@ -585,13 +597,50 @@ function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: Reconn
 const PORT = process.env.PORT || 4545;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// Clean up expired messages every 10 seconds
+const messageCleanupInterval = setInterval(() => {
+  const expiredMessages = database.getExpiredMessagesWithRooms();
+
+  if (expiredMessages.length > 0) {
+    // Group by room for efficient broadcasting
+    const messagesByRoom = new Map<string, string[]>();
+    expiredMessages.forEach(({ id, roomId }) => {
+      if (!messagesByRoom.has(roomId)) {
+        messagesByRoom.set(roomId, []);
+      }
+      messagesByRoom.get(roomId)!.push(id);
+    });
+
+    // Delete from database
+    const deletedCount = database.deleteExpiredMessages();
+
+    // Broadcast deletions to rooms
+    messagesByRoom.forEach((messageIds, roomId) => {
+      messageIds.forEach(messageId => {
+        broadcastToRoom(roomId, {
+          type: 'message_deleted',
+          payload: { messageId, roomId }
+        });
+      });
+    });
+
+    if (deletedCount > 0) {
+      console.log(`Cleaned up ${deletedCount} expired messages`);
+    }
+  }
+}, 10000);
+
 server.listen(Number(PORT), HOST, () => {
   console.log(`Chat server running on http://${HOST}:${PORT}`);
+  console.log('Messages will auto-delete after 2 minutes');
 });
 
 // Graceful shutdown
 const shutdown = () => {
   console.log('Shutting down gracefully...');
+
+  // Clear message cleanup interval
+  clearInterval(messageCleanupInterval);
 
   // Clear all typing timeouts
   typingTimeouts.forEach(timeout => clearTimeout(timeout));

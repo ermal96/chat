@@ -13,6 +13,55 @@ interface MessageListProps {
   onReply: (message: Message) => void;
 }
 
+// Hook to get remaining time until expiry
+function useExpiryTimer(expiresAt: string | undefined): string | null {
+  const [remaining, setRemaining] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expiresAt) return;
+
+    const updateRemaining = () => {
+      const now = Date.now();
+      const expiry = new Date(expiresAt).getTime();
+      const diff = expiry - now;
+
+      if (diff <= 0) {
+        setRemaining(null);
+        return;
+      }
+
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+
+      if (minutes > 0) {
+        setRemaining(`${minutes}m ${secs}s`);
+      } else {
+        setRemaining(`${secs}s`);
+      }
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+
+  return remaining;
+}
+
+function MessageExpiryBadge({ expiresAt }: { expiresAt?: string }) {
+  const remaining = useExpiryTimer(expiresAt);
+
+  if (!remaining) return null;
+
+  return (
+    <span className="expiry-badge">
+      ⏱ {remaining}
+    </span>
+  );
+}
+
 export function MessageList({
   messages,
   currentUserId,
@@ -27,6 +76,7 @@ export function MessageList({
   const [editContent, setEditContent] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ messageId: string; x: number; y: number } | null>(null);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (containerRef.current) {
@@ -100,6 +150,10 @@ export function MessageList({
     setShowEmojiPicker(null);
   };
 
+  const isGif = (url: string) => {
+    return url.includes('.gif') || url.includes('giphy.com');
+  };
+
   return (
     <div className="messages" ref={containerRef}>
       {messages.map((msg, index) => {
@@ -152,10 +206,20 @@ export function MessageList({
                   </div>
                 ) : (
                   <>
-                    <div className="message-text">{msg.content}</div>
+                    {msg.content && <div className="message-text">{msg.content}</div>}
+                    {msg.imageUrl && (
+                      <img
+                        src={msg.imageUrl}
+                        alt={isGif(msg.imageUrl) ? "GIF" : "Image"}
+                        className="message-image"
+                        onClick={() => setExpandedImage(msg.imageUrl!)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    )}
                     <div className="message-meta">
                       <span className="message-time">{formatTime(msg.timestamp)}</span>
                       {msg.edited && <span className="edited-badge">edited</span>}
+                      <MessageExpiryBadge expiresAt={msg.expiresAt} />
                     </div>
                   </>
                 )}
@@ -250,7 +314,7 @@ export function MessageList({
         <div className="no-messages">
           <div className="empty-icon">💬</div>
           <p>No messages yet</p>
-          <p className="subtitle">Start the conversation!</p>
+          <p className="subtitle">Messages auto-delete after 2 minutes</p>
         </div>
       )}
 
@@ -281,6 +345,21 @@ export function MessageList({
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Expanded Image Modal */}
+      {expandedImage && (
+        <div
+          className="modal-overlay"
+          onClick={() => setExpandedImage(null)}
+        >
+          <img
+            src={expandedImage}
+            alt="Expanded"
+            style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: '12px' }}
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
