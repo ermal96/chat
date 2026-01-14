@@ -19,6 +19,11 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Health check endpoint for Coolify/Docker
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 // Serve static files
 app.use(express.static(path.join(__dirname, '../../public')));
 
@@ -291,7 +296,34 @@ function handleGetRooms(ws: WebSocket, client: ConnectedClient): void {
 }
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 
-server.listen(PORT, () => {
-  console.log(`Chat server running on http://localhost:${PORT}`);
+server.listen(Number(PORT), HOST, () => {
+  console.log(`Chat server running on http://${HOST}:${PORT}`);
 });
+
+// Graceful shutdown
+const shutdown = () => {
+  console.log('Shutting down gracefully...');
+
+  // Close all WebSocket connections
+  clients.forEach((client, ws) => {
+    ws.close(1000, 'Server shutting down');
+  });
+
+  wss.close(() => {
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+  });
+
+  // Force exit after 10 seconds
+  setTimeout(() => {
+    console.log('Forcing shutdown');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
