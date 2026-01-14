@@ -14,6 +14,12 @@ function shouldTriggerConfetti(content: string): boolean {
   return CELEBRATION_TRIGGERS.some(trigger => lowerContent.includes(trigger));
 }
 
+// Check if user is mentioned in message
+function isMentioned(content: string, nickname: string): boolean {
+  const mentionRegex = new RegExp(`@${nickname}\\b`, 'i');
+  return mentionRegex.test(content);
+}
+
 interface UserData {
   id: string;
   nickname: string;
@@ -118,6 +124,7 @@ export default function App() {
   // Track if we've already sent reconnect for this connection
   const hasReconnectedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
+  const currentUserNicknameRef = useRef<string | null>(null);
 
   // Request notification permission on mount
   useEffect(() => {
@@ -138,6 +145,7 @@ export default function App() {
         const payload = msg.payload as { user: { id: string; nickname: string; email: string } };
         setUser({ id: payload.user.id, nickname: payload.user.nickname, email: payload.user.email });
         currentUserIdRef.current = payload.user.id;
+        currentUserNicknameRef.current = payload.user.nickname;
         showToast('Account created successfully!', 'success');
         break;
       }
@@ -146,6 +154,7 @@ export default function App() {
         const payload = msg.payload as { user: { id: string; nickname: string; email: string }; rooms: Room[] };
         setUser({ id: payload.user.id, nickname: payload.user.nickname, email: payload.user.email });
         currentUserIdRef.current = payload.user.id;
+        currentUserNicknameRef.current = payload.user.nickname;
         const roomMap = new Map<string, Room>();
         payload.rooms.forEach(r => roomMap.set(r.id, r));
         setRooms(roomMap);
@@ -161,6 +170,7 @@ export default function App() {
         const payload = msg.payload as { room: Room; user: { id: string; nickname: string } };
         setUser(prev => prev ? { ...prev, id: payload.user.id, nickname: payload.user.nickname } : { id: payload.user.id, nickname: payload.user.nickname });
         currentUserIdRef.current = payload.user.id;
+        currentUserNicknameRef.current = payload.user.nickname;
         setRooms(prev => new Map(prev).set(payload.room.id, payload.room));
         setCurrentRoom(payload.room);
         showToast(
@@ -198,16 +208,30 @@ export default function App() {
 
         // Play sound and show notification for messages from others
         if (payload.message.userId !== currentUserIdRef.current) {
+          // Check if current user is mentioned
+          const userMentioned = currentUserNicknameRef.current &&
+            isMentioned(payload.message.content, currentUserNicknameRef.current);
+
           // Always play sound for incoming messages
           playNotificationSound();
 
-          // Show browser notification if document is hidden
-          showNotification(
-            payload.message.nickname,
-            payload.message.content.length > 100
-              ? payload.message.content.slice(0, 100) + '...'
-              : payload.message.content
-          );
+          // Show browser notification
+          if (userMentioned) {
+            // Special notification for mentions
+            showNotification(
+              `${payload.message.nickname} mentioned you!`,
+              payload.message.content.length > 100
+                ? payload.message.content.slice(0, 100) + '...'
+                : payload.message.content
+            );
+          } else {
+            showNotification(
+              payload.message.nickname,
+              payload.message.content.length > 100
+                ? payload.message.content.slice(0, 100) + '...'
+                : payload.message.content
+            );
+          }
         }
 
         // Trigger confetti for celebration messages
@@ -334,6 +358,7 @@ export default function App() {
       case 'reconnected': {
         const payload = msg.payload as { user: { id: string; nickname: string }; rooms: Room[] };
         currentUserIdRef.current = payload.user.id;
+        currentUserNicknameRef.current = payload.user.nickname;
         setIsReconnecting(false);
         const roomMap = new Map<string, Room>();
         payload.rooms.forEach(r => roomMap.set(r.id, r));

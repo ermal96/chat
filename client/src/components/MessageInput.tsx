@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, FormEvent } from 'react';
-import type { Message } from '../../../shared/types';
+import type { Message, UserInfo } from '../../../shared/types';
 import { EmojiPicker } from './EmojiPicker';
 import { GifPicker } from './GifPicker';
 import { MemePicker } from './MemePicker';
@@ -10,6 +10,8 @@ interface MessageInputProps {
   onTypingStop: () => void;
   replyingTo: Message | null;
   onCancelReply: () => void;
+  members?: UserInfo[];
+  currentUserId?: string;
 }
 
 // Text transformation functions
@@ -28,17 +30,27 @@ export function MessageInput({
   onTypingStart,
   onTypingStop,
   replyingTo,
-  onCancelReply
+  onCancelReply,
+  members = [],
+  currentUserId
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showGif, setShowGif] = useState(false);
   const [showMeme, setShowMeme] = useState(false);
   const [showTextMenu, setShowTextMenu] = useState(false);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Filter members for mention autocomplete (exclude current user)
+  const filteredMembers = members
+    .filter(m => m.id !== currentUserId)
+    .filter(m => m.nickname.toLowerCase().includes(mentionSearch.toLowerCase()));
 
   // Focus input when replying
   useEffect(() => {
@@ -46,6 +58,11 @@ export function MessageInput({
       inputRef.current.focus();
     }
   }, [replyingTo]);
+
+  // Reset mention index when filtered members change
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionSearch]);
 
   const handleTyping = () => {
     if (!isTypingRef.current) {
@@ -75,6 +92,60 @@ export function MessageInput({
     return text;
   };
 
+  const handleInputChange = (value: string) => {
+    setContent(value);
+    handleTyping();
+
+    // Check for @ mention trigger
+    const cursorPos = inputRef.current?.selectionStart || value.length;
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (mentionMatch) {
+      setMentionSearch(mentionMatch[1]);
+      setShowMentions(true);
+      closeAllPickers();
+    } else {
+      setShowMentions(false);
+      setMentionSearch('');
+    }
+  };
+
+  const insertMention = (nickname: string) => {
+    const cursorPos = inputRef.current?.selectionStart || content.length;
+    const textBeforeCursor = content.slice(0, cursorPos);
+    const textAfterCursor = content.slice(cursorPos);
+
+    // Find the @ position
+    const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+    if (mentionMatch) {
+      const beforeMention = textBeforeCursor.slice(0, mentionMatch.index);
+      const newContent = `${beforeMention}@${nickname} ${textAfterCursor}`;
+      setContent(newContent);
+    }
+
+    setShowMentions(false);
+    setMentionSearch('');
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMentions && filteredMembers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev + 1) % filteredMembers.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev - 1 + filteredMembers.length) % filteredMembers.length);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(filteredMembers[mentionIndex].nickname);
+      } else if (e.key === 'Escape') {
+        setShowMentions(false);
+      }
+    }
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
 
@@ -93,6 +164,7 @@ export function MessageInput({
     const processedContent = processTextCommands(content.trim());
     onSend(processedContent);
     setContent('');
+    setShowMentions(false);
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -194,15 +266,32 @@ export function MessageInput({
             Aa
           </button>
 
+          <button
+            type="button"
+            className="input-action-btn"
+            onClick={() => {
+              // Insert @ at cursor position
+              const cursorPos = inputRef.current?.selectionStart || content.length;
+              const newContent = content.slice(0, cursorPos) + '@' + content.slice(cursorPos);
+              setContent(newContent);
+              setShowMentions(true);
+              setMentionSearch('');
+              closeAllPickers();
+              setTimeout(() => inputRef.current?.focus(), 0);
+            }}
+            title="Mention someone"
+            style={{ fontSize: '14px', fontWeight: 'bold' }}
+          >
+            @
+          </button>
+
           <input
             ref={inputRef}
             type="text"
-            placeholder={replyingTo ? `Reply to ${replyingTo.nickname}...` : 'Type a message... (try /mock /loud /uwu)'}
+            placeholder={replyingTo ? `Reply to ${replyingTo.nickname}...` : 'Type a message... (use @ to mention)'}
             value={content}
-            onChange={e => {
-              setContent(e.target.value);
-              handleTyping();
-            }}
+            onChange={e => handleInputChange(e.target.value)}
+            onKeyDown={handleKeyDown}
             autoComplete="off"
           />
 
@@ -212,6 +301,26 @@ export function MessageInput({
             </svg>
           </button>
         </div>
+
+        {/* Mention Autocomplete */}
+        {showMentions && filteredMembers.length > 0 && (
+          <div className="mention-autocomplete">
+            <div className="mention-header">Mention someone</div>
+            {filteredMembers.slice(0, 6).map((member, index) => (
+              <div
+                key={member.id}
+                className={`mention-item ${index === mentionIndex ? 'active' : ''}`}
+                onClick={() => insertMention(member.nickname)}
+              >
+                <span className="mention-avatar" style={{ background: member.avatar || '#6264a7' }}>
+                  {member.nickname.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="mention-name">{member.nickname}</span>
+                {member.isOnline && <span className="mention-online">●</span>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {showEmoji && (
           <div className="emoji-picker-wrapper">

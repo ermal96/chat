@@ -6,11 +6,50 @@ import { EmojiPicker } from './EmojiPicker';
 interface MessageListProps {
   messages: Message[];
   currentUserId: string;
+  currentUserNickname: string;
   onEditMessage: (messageId: string, content: string) => void;
   onDeleteMessage: (messageId: string) => void;
   onAddReaction: (messageId: string, emoji: string) => void;
   onRemoveReaction: (messageId: string, emoji: string) => void;
   onReply: (message: Message) => void;
+}
+
+// Render message content with highlighted mentions
+function renderMessageContent(content: string, currentUserNickname: string): React.ReactNode {
+  // Match @username patterns
+  const mentionRegex = /@(\w+)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = mentionRegex.exec(content)) !== null) {
+    // Add text before the mention
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+
+    const mentionedName = match[1];
+    const isSelfMention = mentionedName.toLowerCase() === currentUserNickname.toLowerCase();
+
+    // Add the mention as a highlighted span
+    parts.push(
+      <span
+        key={match.index}
+        className={`mention ${isSelfMention ? 'mention-self' : ''}`}
+      >
+        @{mentionedName}
+      </span>
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : content;
 }
 
 // Hook to get remaining time until expiry
@@ -65,6 +104,7 @@ function MessageExpiryBadge({ expiresAt }: { expiresAt?: string }) {
 export function MessageList({
   messages,
   currentUserId,
+  currentUserNickname,
   onEditMessage,
   onDeleteMessage,
   onAddReaction,
@@ -206,7 +246,7 @@ export function MessageList({
                   </div>
                 ) : (
                   <>
-                    {msg.content && <div className="message-text">{msg.content}</div>}
+                    {msg.content && <div className="message-text">{renderMessageContent(msg.content, currentUserNickname)}</div>}
                     {msg.imageUrl && (
                       <img
                         src={msg.imageUrl}

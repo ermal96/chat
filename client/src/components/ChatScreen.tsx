@@ -166,6 +166,7 @@ export function ChatScreen({
               <MessageList
                 messages={messages}
                 currentUserId={user.id}
+                currentUserNickname={user.nickname}
                 onEditMessage={onEditMessage}
                 onDeleteMessage={onDeleteMessage}
                 onAddReaction={onAddReaction}
@@ -191,6 +192,8 @@ export function ChatScreen({
                 onTypingStop={onTypingStop}
                 replyingTo={replyingTo}
                 onCancelReply={onCancelReply}
+                members={currentRoom?.members}
+                currentUserId={user.id}
               />
             </div>
           )}
