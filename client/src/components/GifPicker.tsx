@@ -1,140 +1,207 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface GifPickerProps {
   onSelect: (gifUrl: string) => void;
   onClose: () => void;
 }
 
-// Popular GIFs - you can replace with Tenor/GIPHY API integration
-const POPULAR_GIFS = [
-  'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDJ5eWU2bWI2YnF6ZjVjMWNyNnh2aTJ3NnRtYjBsZWliaXBlY2N2aCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7abKhOpu0NwenH3O/giphy.gif',
-  'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWM2a3J6ZWR5NWdqMXJ1YTN3djA5dWx5a3o4cTZsaWV3ajN2eTFjZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o6Zt6ML6BklcajjsA/giphy.gif',
-  'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbTRyYzNxNnc4YzI0OTBybWQzeGJjdnBra2R4eXZ1ZWJhZjd2NnFkYiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26gsspfbt1HfVQ9va/giphy.gif',
-  'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY3ZwcnZpMzNhcnBxMDJ5YTRxbWoyOXQ3ZG9sMnA2ejV2c21yNXZmciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LOnt6uqjD9OexmQJRB/giphy.gif',
-  'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW95OGpmZXB4ZjB5ZHFyeGJ3dTd1cGVqcXQ2NTJqYmNrNWpsMGJxeSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xiMUwBRn5RDLhzwO80/giphy.gif',
-  'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHI0a3JmZmE5cXN1a2xjdTc1ZXNlYTQ5MWE5dWJ4ajIyMTVxNnI1aCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xUPOqo6E1XvWXwlCyQ/giphy.gif',
-  'https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif',
-  'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif',
-];
+interface GiphyGif {
+  id: string;
+  images: {
+    fixed_height: {
+      url: string;
+      width: string;
+      height: string;
+    };
+    original: {
+      url: string;
+    };
+  };
+  title: string;
+}
 
-// Categories with more GIFs
-const GIF_CATEGORIES: { name: string; gifs: string[] }[] = [
-  {
-    name: 'Reactions',
-    gifs: [
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcTNrMXBmZ2VqNTl6bWU5ZGpqNnBwNXFyMjJnaXFscjUxcm5maDY2ZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKwmnDgQb5jemjK/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXB0M2pzOXV0N2x5dG5iMnV6ajZyeHZxYmJjbGJ2ZnhqYXRqajZoZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o6Zt4HU9uwXmXSAuI/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXRocXp5Y3BkcHB3OWlnZjY4YjM4cjl3NnJ5MjBucGM2MHhwa29lcCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l41lGvinEgARjB2HC/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeXB4c2xqc2RpN2IyY2syNTFhZ3E3YmJvdWd2bXE3NWNqaHJ0eXVmeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7qDSOvfaCO9b3MlO/giphy.gif',
-      'https://media.giphy.com/media/NipFetnQOuKhW/giphy.gif',
-      'https://media.giphy.com/media/l0MYC0LajbaPoEADu/giphy.gif',
-    ]
-  },
-  {
-    name: 'Celebrate',
-    gifs: [
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWRqbTVnNWQxMjkxbWc5NjBsbHJzY2dzYXQ3NDQ0ZWNkMHB5YnFiNyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/g9582DNuQppxC/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExN3p5eWR3cWNmeXp5aWQ2ZmN5Yml1ZGxrdTJqOW51cjhub2t3bWlqbiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0MYt5jPR6QX5pnqM/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW5namZsMmZ3bnBsaXEybXRtZzRhaDFpdDNmeGpiZmZkOHN0NXdkeSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26u4cqiYI30juCOGY/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3h3YWE5cXB3eGZ4cW5mdW1qOGprNWJwcjE3YjE3NGQ0OGViOTFqcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0Iyau7QcKtKUYIda/giphy.gif',
-      'https://media.giphy.com/media/s2qXK8wAvkHTO/giphy.gif',
-      'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif',
-    ]
-  },
-  {
-    name: 'Love',
-    gifs: [
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbzl1ZGxjZ3NiZGZyM3J4bHJ2c2hqYTg0cjFtczlwdG42d2JscGtxOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l4pTdcifPZLpDjL1e/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZW5vbmxhMGttNjBhemltMWs2azJ3MTdqdzRqN24zNjZwcWFvdTRhNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3oEjI4sFlp73fvEYgw/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2dhdWd5dGRqb3Fuc2ZzZnBhYWs1eXk5dTBoejQ4cTdob2hvNm8wdCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26BRv0ThflsHCqDrG/giphy.gif',
-      'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzBrenRvMnJmdnZwMWJnY3VkMXJxdHBjN2NiaDVqZml4MThocG9yMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0MYGb1LuZ3n7dRnO/giphy.gif',
-      'https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif',
-      'https://media.giphy.com/media/26FLdmIp6wJr91JAI/giphy.gif',
-    ]
-  },
-  {
-    name: 'Funny',
-    gifs: [
-      'https://media.giphy.com/media/10JhviFuU2gWD6/giphy.gif',
-      'https://media.giphy.com/media/ZqlvCTNHpqrio/giphy.gif',
-      'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif',
-      'https://media.giphy.com/media/l0HlPystfePnAI3G8/giphy.gif',
-      'https://media.giphy.com/media/3og0INyCmHlNylks9O/giphy.gif',
-      'https://media.giphy.com/media/BZhrhoxl6CFa98vTCZ/giphy.gif',
-    ]
-  },
-  {
-    name: 'Animals',
-    gifs: [
-      'https://media.giphy.com/media/mlvseq9yvZhba/giphy.gif',
-      'https://media.giphy.com/media/VbnUQpnihPSIgIXuZv/giphy.gif',
-      'https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif',
-      'https://media.giphy.com/media/11s7Ke7jcNxCHS/giphy.gif',
-      'https://media.giphy.com/media/ule4vhcY1xEKQ/giphy.gif',
-      'https://media.giphy.com/media/nR4L10XlJcSeQ/giphy.gif',
-    ]
-  }
-];
+// Giphy API key - public beta key for development
+const GIPHY_API_KEY = 'dc6zaTOxFJmzC';
+const GIPHY_API_BASE = 'https://api.giphy.com/v1/gifs';
+
+const CATEGORIES = ['Trending', 'Reactions', 'Funny', 'Love', 'Celebrate', 'Animals', 'Memes', 'Fail'];
 
 export function GifPicker({ onSelect, onClose }: GifPickerProps) {
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [gifs, setGifs] = useState<GiphyGif[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState('Trending');
 
-  const handleGifClick = (gifUrl: string) => {
-    onSelect(gifUrl);
+  // Fetch trending GIFs
+  const fetchTrending = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${GIPHY_API_BASE}/trending?api_key=${GIPHY_API_KEY}&limit=24&rating=g`
+      );
+      const data = await response.json();
+      setGifs(data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch trending GIFs:', error);
+      setGifs([]);
+    }
+    setLoading(false);
+  }, []);
+
+  // Search GIFs
+  const searchGifs = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      fetchTrending();
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${GIPHY_API_BASE}/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(query)}&limit=24&rating=g`
+      );
+      const data = await response.json();
+      setGifs(data.data || []);
+    } catch (error) {
+      console.error('Failed to search GIFs:', error);
+      setGifs([]);
+    }
+    setLoading(false);
+  }, [fetchTrending]);
+
+  // Load trending on mount
+  useEffect(() => {
+    fetchTrending();
+  }, [fetchTrending]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery) {
+        searchGifs(searchQuery);
+        setActiveCategory('');
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchGifs]);
+
+  // Handle category click
+  const handleCategoryClick = (category: string) => {
+    setActiveCategory(category);
+    setSearchQuery('');
+    if (category === 'Trending') {
+      fetchTrending();
+    } else {
+      searchGifs(category);
+    }
   };
 
-  const displayGifs = activeCategory
-    ? GIF_CATEGORIES.find(c => c.name === activeCategory)?.gifs || []
-    : POPULAR_GIFS;
+  // Handle GIF selection
+  const handleGifClick = (gif: GiphyGif) => {
+    onSelect(gif.images.original.url);
+  };
 
   return (
     <div className="gif-picker" onClick={(e) => e.stopPropagation()}>
-      <div className="gif-picker-header" style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-        <button
-          onClick={() => setActiveCategory(null)}
+      {/* Search input */}
+      <div style={{ marginBottom: '12px' }}>
+        <input
+          type="text"
+          placeholder="Search GIFs..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
           style={{
-            padding: '6px 12px',
-            background: !activeCategory ? 'var(--primary)' : 'var(--bg-hover)',
-            border: 'none',
+            width: '100%',
+            padding: '10px 12px',
+            border: '1px solid var(--border)',
             borderRadius: '8px',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: 600
+            background: 'var(--bg-secondary)',
+            color: 'var(--text-primary)',
+            fontSize: '14px',
+            outline: 'none',
           }}
-        >
-          Popular
-        </button>
-        {GIF_CATEGORIES.map(cat => (
+          autoFocus
+        />
+      </div>
+
+      {/* Categories */}
+      <div className="gif-picker-header" style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+        {CATEGORIES.map(cat => (
           <button
-            key={cat.name}
-            onClick={() => setActiveCategory(cat.name)}
+            key={cat}
+            onClick={() => handleCategoryClick(cat)}
             style={{
-              padding: '6px 12px',
-              background: activeCategory === cat.name ? 'var(--primary)' : 'var(--bg-hover)',
+              padding: '5px 10px',
+              background: activeCategory === cat ? 'var(--primary)' : 'var(--bg-hover)',
               border: 'none',
               borderRadius: '8px',
               color: 'white',
               cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: 600
+              fontSize: '11px',
+              fontWeight: 600,
+              transition: 'background 0.2s',
             }}
           >
-            {cat.name}
+            {cat}
           </button>
         ))}
       </div>
 
-      <div className="gif-grid">
-        {displayGifs.map((gif, index) => (
-          <div
-            key={index}
-            className="gif-item"
-            onClick={() => handleGifClick(gif)}
-          >
-            <img src={gif} alt="GIF" loading="lazy" />
+      {/* GIF grid */}
+      <div className="gif-grid" style={{ minHeight: '200px' }}>
+        {loading ? (
+          <div style={{
+            gridColumn: '1 / -1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px',
+            color: 'var(--text-secondary)'
+          }}>
+            Loading GIFs...
           </div>
-        ))}
+        ) : gifs.length === 0 ? (
+          <div style={{
+            gridColumn: '1 / -1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px',
+            color: 'var(--text-secondary)'
+          }}>
+            No GIFs found
+          </div>
+        ) : (
+          gifs.map((gif) => (
+            <div
+              key={gif.id}
+              className="gif-item"
+              onClick={() => handleGifClick(gif)}
+              title={gif.title}
+            >
+              <img
+                src={gif.images.fixed_height.url}
+                alt={gif.title}
+                loading="lazy"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Powered by Giphy */}
+      <div style={{
+        marginTop: '8px',
+        textAlign: 'center',
+        fontSize: '10px',
+        color: 'var(--text-tertiary)',
+        opacity: 0.7
+      }}>
+        Powered by GIPHY
       </div>
     </div>
   );
