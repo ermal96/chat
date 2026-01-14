@@ -295,7 +295,7 @@ function handleGetRooms(ws: WebSocket, client: ConnectedClient): void {
   send(ws, { type: 'room_list', payload: { rooms } });
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4545;
 const HOST = process.env.HOST || '0.0.0.0';
 
 server.listen(Number(PORT), HOST, () => {
