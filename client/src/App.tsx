@@ -313,6 +313,20 @@ export default function App() {
         break;
       }
 
+      case 'messages_read': {
+        const payload = msg.payload as { roomId: string; messageIds: string[]; expiresAt: string };
+        // Update messages with expiration time
+        setMessages(prev => {
+          const roomMessages = prev.get(payload.roomId);
+          if (!roomMessages) return prev;
+          const updated = roomMessages.map(m =>
+            payload.messageIds.includes(m.id) ? { ...m, expiresAt: payload.expiresAt } : m
+          );
+          return new Map(prev).set(payload.roomId, updated);
+        });
+        break;
+      }
+
       case 'error': {
         const payload = msg.payload as { message: string };
         showToast(payload.message, 'error');
@@ -344,6 +358,40 @@ export default function App() {
       send('get_room_history', { roomId: currentRoom.id });
     }
   }, [connected, currentRoom, send, messages]);
+
+  // Mark messages as read when viewing them (starts 2-minute expiration countdown)
+  useEffect(() => {
+    if (!connected || !currentRoom || document.hidden) return;
+
+    const roomMessages = messages.get(currentRoom.id) || [];
+    // Find messages without expiresAt (not yet read)
+    const unreadIds = roomMessages
+      .filter(m => !m.expiresAt)
+      .map(m => m.id);
+
+    if (unreadIds.length > 0) {
+      send('mark_read', { roomId: currentRoom.id, messageIds: unreadIds });
+    }
+  }, [connected, currentRoom, messages, send]);
+
+  // Handle visibility change - mark messages as read when window becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && connected && currentRoom) {
+        const roomMessages = messages.get(currentRoom.id) || [];
+        const unreadIds = roomMessages
+          .filter(m => !m.expiresAt)
+          .map(m => m.id);
+
+        if (unreadIds.length > 0) {
+          send('mark_read', { roomId: currentRoom.id, messageIds: unreadIds });
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [connected, currentRoom, messages, send]);
 
   const handleRegister = (email: string, password: string, nickname: string) => {
     send('register', { email, password, nickname });

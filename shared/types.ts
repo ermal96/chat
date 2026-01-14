@@ -131,6 +131,7 @@ export type ServerMessageType =
   | 'reconnected'
   | 'nickname_changed'
   | 'push_subscribed'
+  | 'messages_read'
   // Team events
   | 'team_created'
   | 'team_joined'
@@ -258,6 +259,11 @@ export interface GetChannelHistoryPayload {
 
 export interface ChangeNicknamePayload {
   nickname: string;
+}
+
+export interface MarkReadPayload {
+  roomId: string;
+  messageIds: string[];
 }
 
 export interface SubscribePushPayload {

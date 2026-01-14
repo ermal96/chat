@@ -28,6 +28,7 @@ import {
   DeleteChannelPayload,
   GetChannelHistoryPayload,
   ChangeNicknamePayload,
+  MarkReadPayload,
   SubscribePushPayload,
   PushSubscriptionJSON,
   User,
@@ -311,6 +312,9 @@ async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<voi
       break;
     case 'subscribe_push':
       handleSubscribePush(ws, client, message.payload as SubscribePushPayload);
+      break;
+    case 'mark_read':
+      await handleMarkRead(ws, client, message.payload as MarkReadPayload);
       break;
   }
 }
@@ -1116,6 +1120,44 @@ function handleSubscribePush(ws: WebSocket, client: ConnectedClient, payload: Su
   });
 
   console.log(`Push subscription added for user ${client.user.nickname}`);
+}
+
+// Handle mark messages as read - starts expiration countdown
+async function handleMarkRead(ws: WebSocket, client: ConnectedClient, payload: MarkReadPayload): Promise<void> {
+  const { roomId, messageIds } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!client.rooms.has(roomId)) {
+    send(ws, { type: 'error', payload: { message: 'Not in this room' } });
+    return;
+  }
+
+  if (!messageIds || messageIds.length === 0) {
+    return;
+  }
+
+  // Mark messages as read (starts 2-minute countdown)
+  const markedIds = await database.markMessagesAsRead(messageIds);
+
+  if (markedIds.length > 0) {
+    // Calculate expiration time (2 minutes from now)
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+
+    // Broadcast to all room members that these messages have been read
+    // and will expire soon
+    broadcastToRoom(roomId, {
+      type: 'messages_read',
+      payload: {
+        roomId,
+        messageIds: markedIds,
+        expiresAt
+      }
+    });
+  }
 }
 
 // Send push notification to a user

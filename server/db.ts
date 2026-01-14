@@ -306,8 +306,7 @@ export const database = {
     replyTo?: { id: string; nickname: string; content: string },
     imageUrl?: string
   ): Promise<MessageType> {
-    const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
-
+    // Don't set expiresAt - countdown starts when message is read
     const message = new Message({
       _id: id,
       roomId,
@@ -320,12 +319,38 @@ export const database = {
         nickname: replyTo.nickname,
         content: replyTo.content
       } : undefined,
-      expiresAt,
       reactions: []
     });
 
     await message.save();
     return toMessageType(message);
+  },
+
+  // Mark messages as read - starts the 2 minute expiration countdown
+  async markMessagesAsRead(messageIds: string[]): Promise<string[]> {
+    if (messageIds.length === 0) return [];
+
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes from now
+
+    // Only update messages that don't have expiresAt set yet
+    const result = await Message.updateMany(
+      {
+        _id: { $in: messageIds },
+        expiresAt: { $exists: false }
+      },
+      { expiresAt }
+    );
+
+    if (result.modifiedCount > 0) {
+      // Return the IDs that were actually updated
+      const updated = await Message.find({
+        _id: { $in: messageIds },
+        expiresAt
+      }).select('_id');
+      return updated.map(m => m._id);
+    }
+
+    return [];
   },
 
   async deleteExpiredMessages(): Promise<number> {
