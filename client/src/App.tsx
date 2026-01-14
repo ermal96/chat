@@ -287,6 +287,32 @@ export default function App() {
         break;
       }
 
+      case 'nickname_changed': {
+        const payload = msg.payload as { user?: { id: string; nickname: string }; roomId?: string; userId?: string; oldNickname?: string; newNickname?: string };
+        // If this is for the current user (direct response)
+        if (payload.user) {
+          setUser(prev => prev ? { ...prev, nickname: payload.user!.nickname } : null);
+          showToast('Nickname changed successfully!', 'success');
+        }
+        // If this is a broadcast about another user's nickname change
+        if (payload.roomId && payload.userId && payload.newNickname) {
+          setRooms(prev => {
+            const room = prev.get(payload.roomId!);
+            if (!room) return prev;
+            const members = (room.members || []).map(m =>
+              m.id === payload.userId ? { ...m, nickname: payload.newNickname! } : m
+            );
+            return new Map(prev).set(payload.roomId!, { ...room, members });
+          });
+        }
+        break;
+      }
+
+      case 'push_subscribed': {
+        console.log('Push notifications enabled');
+        break;
+      }
+
       case 'error': {
         const payload = msg.payload as { message: string };
         showToast(payload.message, 'error');
@@ -409,6 +435,10 @@ export default function App() {
     send('get_room_history', { roomId: room.id });
   };
 
+  const handleChangeNickname = (newNickname: string) => {
+    send('change_nickname', { nickname: newNickname });
+  };
+
   const handleLogout = () => {
     rooms.forEach(room => {
       send('leave_room', { roomId: room.id });
@@ -421,6 +451,56 @@ export default function App() {
     hasReconnectedRef.current = false;
     currentUserIdRef.current = null;
   };
+
+  // Subscribe to push notifications
+  const subscribeToPush = useCallback(async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return;
+    }
+
+    try {
+      // Register service worker
+      const registration = await navigator.serviceWorker.register('/sw.js');
+
+      // Request permission
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+
+      // Get VAPID key
+      const response = await fetch('/api/push/vapid-key');
+      const { publicKey } = await response.json();
+
+      // Convert VAPID key
+      const urlBase64ToUint8Array = (base64String: string) => {
+        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+      };
+
+      // Subscribe
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+
+      // Send to server
+      send('subscribe_push', { subscription: subscription.toJSON() });
+    } catch (err) {
+      console.error('Push subscription failed:', err);
+    }
+  }, [send]);
+
+  // Subscribe to push when logged in
+  useEffect(() => {
+    if (connected && user && user.email) {
+      subscribeToPush();
+    }
+  }, [connected, user, subscribeToPush]);
 
   // User is logged in if they have an email (registered user)
   const isLoggedIn = user && user.email;
@@ -466,6 +546,7 @@ export default function App() {
           onLeaveRoom={handleLeaveRoom}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          onChangeNickname={handleChangeNickname}
           onLogout={handleLogout}
         />
       )}

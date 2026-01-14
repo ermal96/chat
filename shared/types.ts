@@ -99,6 +99,8 @@ export type ClientMessageType =
   | 'get_room_history'
   | 'reconnect'
   | 'mark_read'
+  | 'change_nickname'
+  | 'subscribe_push'
   // Team operations
   | 'create_team'
   | 'join_team'
@@ -127,6 +129,8 @@ export type ServerMessageType =
   | 'error'
   | 'room_history'
   | 'reconnected'
+  | 'nickname_changed'
+  | 'push_subscribed'
   // Team events
   | 'team_created'
   | 'team_joined'
@@ -250,6 +254,23 @@ export interface DeleteChannelPayload {
 
 export interface GetChannelHistoryPayload {
   channelId: string;
+}
+
+export interface ChangeNicknamePayload {
+  nickname: string;
+}
+
+export interface SubscribePushPayload {
+  subscription: PushSubscriptionJSON;
+}
+
+export interface PushSubscriptionJSON {
+  endpoint: string;
+  expirationTime?: number | null;
+  keys?: {
+    p256dh: string;
+    auth: string;
+  };
 }
 
 // Avatar colors

@@ -32,6 +32,7 @@ interface ChatScreenProps {
   onLeaveRoom: (roomId: string) => void;
   onCreateRoom: (nickname: string, roomName: string, roomType: 'group' | 'direct') => void;
   onJoinRoom: (nickname: string, inviteCode: string) => void;
+  onChangeNickname: (newNickname: string) => void;
   onLogout: () => void;
 }
 
@@ -55,11 +56,21 @@ export function ChatScreen({
   onLeaveRoom,
   onCreateRoom,
   onJoinRoom,
+  onChangeNickname,
   onLogout
 }: ChatScreenProps) {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showNewRoomModal, setShowNewRoomModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showEditNickname, setShowEditNickname] = useState(false);
+  const [newNickname, setNewNickname] = useState(user.nickname);
+
+  const handleSaveNickname = () => {
+    if (newNickname.trim() && newNickname.trim() !== user.nickname) {
+      onChangeNickname(newNickname.trim());
+    }
+    setShowEditNickname(false);
+  };
 
   const handleLeaveRoom = () => {
     if (currentRoom && confirm(`Leave "${currentRoom.name}"?`)) {
@@ -89,6 +100,10 @@ export function ChatScreen({
             setShowMobileMenu(false);
           }}
           onNewRoom={() => setShowNewRoomModal(true)}
+          onEditNickname={() => {
+            setNewNickname(user.nickname);
+            setShowEditNickname(true);
+          }}
           onLogout={onLogout}
           showMobile={showMobileMenu}
           onCloseMobile={() => setShowMobileMenu(false)}
@@ -201,6 +216,36 @@ export function ChatScreen({
       {/* Mobile overlay */}
       {showMobileMenu && (
         <div className="mobile-overlay" onClick={() => setShowMobileMenu(false)} />
+      )}
+
+      {/* Edit Nickname Modal */}
+      {showEditNickname && (
+        <div className="modal-overlay" onClick={() => setShowEditNickname(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Change Nickname</h3>
+              <button className="close-btn" onClick={() => setShowEditNickname(false)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <input
+                type="text"
+                value={newNickname}
+                onChange={e => setNewNickname(e.target.value)}
+                placeholder="Enter new nickname"
+                maxLength={30}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSaveNickname();
+                  if (e.key === 'Escape') setShowEditNickname(false);
+                }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn secondary" onClick={() => setShowEditNickname(false)}>Cancel</button>
+              <button className="btn primary" onClick={handleSaveNickname}>Save</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -13,6 +13,8 @@ const POPULAR_GIFS = [
   'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY3ZwcnZpMzNhcnBxMDJ5YTRxbWoyOXQ3ZG9sMnA2ejV2c21yNXZmciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LOnt6uqjD9OexmQJRB/giphy.gif',
   'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW95OGpmZXB4ZjB5ZHFyeGJ3dTd1cGVqcXQ2NTJqYmNrNWpsMGJxeSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xiMUwBRn5RDLhzwO80/giphy.gif',
   'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHI0a3JmZmE5cXN1a2xjdTc1ZXNlYTQ5MWE5dWJ4ajIyMTVxNnI1aCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xUPOqo6E1XvWXwlCyQ/giphy.gif',
+  'https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif',
+  'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif',
 ];
 
 // Categories with more GIFs
@@ -24,6 +26,8 @@ const GIF_CATEGORIES: { name: string; gifs: string[] }[] = [
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXB0M2pzOXV0N2x5dG5iMnV6ajZyeHZxYmJjbGJ2ZnhqYXRqajZoZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o6Zt4HU9uwXmXSAuI/giphy.gif',
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXRocXp5Y3BkcHB3OWlnZjY4YjM4cjl3NnJ5MjBucGM2MHhwa29lcCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l41lGvinEgARjB2HC/giphy.gif',
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeXB4c2xqc2RpN2IyY2syNTFhZ3E3YmJvdWd2bXE3NWNqaHJ0eXVmeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7qDSOvfaCO9b3MlO/giphy.gif',
+      'https://media.giphy.com/media/NipFetnQOuKhW/giphy.gif',
+      'https://media.giphy.com/media/l0MYC0LajbaPoEADu/giphy.gif',
     ]
   },
   {
@@ -33,6 +37,8 @@ const GIF_CATEGORIES: { name: string; gifs: string[] }[] = [
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExN3p5eWR3cWNmeXp5aWQ2ZmN5Yml1ZGxrdTJqOW51cjhub2t3bWlqbiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0MYt5jPR6QX5pnqM/giphy.gif',
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW5namZsMmZ3bnBsaXEybXRtZzRhaDFpdDNmeGpiZmZkOHN0NXdkeSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26u4cqiYI30juCOGY/giphy.gif',
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3h3YWE5cXB3eGZ4cW5mdW1qOGprNWJwcjE3YjE3NGQ0OGViOTFqcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0Iyau7QcKtKUYIda/giphy.gif',
+      'https://media.giphy.com/media/s2qXK8wAvkHTO/giphy.gif',
+      'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif',
     ]
   },
   {
@@ -42,6 +48,30 @@ const GIF_CATEGORIES: { name: string; gifs: string[] }[] = [
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZW5vbmxhMGttNjBhemltMWs2azJ3MTdqdzRqN24zNjZwcWFvdTRhNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3oEjI4sFlp73fvEYgw/giphy.gif',
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2dhdWd5dGRqb3Fuc2ZzZnBhYWs1eXk5dTBoejQ4cTdob2hvNm8wdCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26BRv0ThflsHCqDrG/giphy.gif',
       'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzBrenRvMnJmdnZwMWJnY3VkMXJxdHBjN2NiaDVqZml4MThocG9yMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0MYGb1LuZ3n7dRnO/giphy.gif',
+      'https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif',
+      'https://media.giphy.com/media/26FLdmIp6wJr91JAI/giphy.gif',
+    ]
+  },
+  {
+    name: 'Funny',
+    gifs: [
+      'https://media.giphy.com/media/10JhviFuU2gWD6/giphy.gif',
+      'https://media.giphy.com/media/ZqlvCTNHpqrio/giphy.gif',
+      'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif',
+      'https://media.giphy.com/media/l0HlPystfePnAI3G8/giphy.gif',
+      'https://media.giphy.com/media/3og0INyCmHlNylks9O/giphy.gif',
+      'https://media.giphy.com/media/BZhrhoxl6CFa98vTCZ/giphy.gif',
+    ]
+  },
+  {
+    name: 'Animals',
+    gifs: [
+      'https://media.giphy.com/media/mlvseq9yvZhba/giphy.gif',
+      'https://media.giphy.com/media/VbnUQpnihPSIgIXuZv/giphy.gif',
+      'https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif',
+      'https://media.giphy.com/media/11s7Ke7jcNxCHS/giphy.gif',
+      'https://media.giphy.com/media/ule4vhcY1xEKQ/giphy.gif',
+      'https://media.giphy.com/media/nR4L10XlJcSeQ/giphy.gif',
     ]
   }
 ];

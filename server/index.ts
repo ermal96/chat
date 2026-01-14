@@ -3,6 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 import path from 'path';
+import webpush from 'web-push';
 import { connectDB, database } from './db';
 import { generateInviteCode, generateId } from './invite';
 import {
@@ -26,6 +27,9 @@ import {
   CreateChannelPayload,
   DeleteChannelPayload,
   GetChannelHistoryPayload,
+  ChangeNicknamePayload,
+  SubscribePushPayload,
+  PushSubscriptionJSON,
   User,
   Room,
   Team,
@@ -33,13 +37,35 @@ import {
   getAvatarColor
 } from '../shared/types';
 
+// VAPID keys for push notifications (generate new ones for production)
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'UUxI4O8-FbRouADVXc-hK4_XaXI5c4dkv9X8GJ6fMF4';
+
+// Configure web-push
+webpush.setVapidDetails(
+  'mailto:admin@cunatteams.com',
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY
+);
+
+// Store push subscriptions per user (userId -> subscriptions)
+const pushSubscriptions: Map<string, PushSubscriptionJSON[]> = new Map();
+
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Parse JSON bodies
+app.use(express.json());
+
 // Health check endpoint for Coolify/Docker
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// VAPID public key endpoint for push notifications
+app.get('/api/push/vapid-key', (_req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
 });
 
 // Serve static files from React build
@@ -279,6 +305,12 @@ async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<voi
       break;
     case 'get_channel_history':
       await handleGetChannelHistory(ws, client, message.payload as GetChannelHistoryPayload);
+      break;
+    case 'change_nickname':
+      await handleChangeNickname(ws, client, message.payload as ChangeNicknamePayload);
+      break;
+    case 'subscribe_push':
+      handleSubscribePush(ws, client, message.payload as SubscribePushPayload);
       break;
   }
 }
@@ -554,6 +586,10 @@ async function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload
     type: 'new_message',
     payload: { message }
   });
+
+  // Send push notifications to offline room members
+  const notificationBody = hasImage && !hasContent ? 'Sent an image' : (content?.trim() || '').slice(0, 100);
+  sendPushToRoomMembers(roomId, client.user.id, client.user.nickname, notificationBody);
 }
 
 async function handleEditMessage(ws: WebSocket, client: ConnectedClient, payload: EditMessagePayload): Promise<void> {
@@ -999,6 +1035,137 @@ async function handleGetChannelHistory(ws: WebSocket, client: ConnectedClient, p
     type: 'channel_history',
     payload: { channelId, messages }
   });
+}
+
+// Handle nickname change
+async function handleChangeNickname(ws: WebSocket, client: ConnectedClient, payload: ChangeNicknamePayload): Promise<void> {
+  const { nickname } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!nickname || nickname.trim().length === 0) {
+    send(ws, { type: 'error', payload: { message: 'Nickname cannot be empty' } });
+    return;
+  }
+
+  if (nickname.trim().length > 30) {
+    send(ws, { type: 'error', payload: { message: 'Nickname must be 30 characters or less' } });
+    return;
+  }
+
+  const oldNickname = client.user.nickname;
+  const newNickname = nickname.trim();
+
+  // Update in database
+  client.user = await database.createOrUpdateUser(client.user.id, newNickname);
+
+  // Notify the user
+  send(ws, {
+    type: 'nickname_changed',
+    payload: {
+      user: { id: client.user.id, nickname: newNickname, avatar: getAvatarColor(client.user.id) }
+    }
+  });
+
+  // Notify all rooms the user is in
+  client.rooms.forEach(roomId => {
+    broadcastToRoom(roomId, {
+      type: 'nickname_changed',
+      payload: {
+        roomId,
+        userId: client.user!.id,
+        oldNickname,
+        newNickname
+      }
+    }, ws);
+  });
+
+  console.log(`User ${oldNickname} changed name to ${newNickname}`);
+}
+
+// Handle push subscription
+function handleSubscribePush(ws: WebSocket, client: ConnectedClient, payload: SubscribePushPayload): void {
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  const { subscription } = payload;
+
+  if (!subscription || !subscription.endpoint) {
+    send(ws, { type: 'error', payload: { message: 'Invalid push subscription' } });
+    return;
+  }
+
+  // Store subscription for user
+  const userSubs = pushSubscriptions.get(client.user.id) || [];
+
+  // Check if subscription already exists
+  const exists = userSubs.some(s => s.endpoint === subscription.endpoint);
+  if (!exists) {
+    userSubs.push(subscription);
+    pushSubscriptions.set(client.user.id, userSubs);
+  }
+
+  send(ws, {
+    type: 'push_subscribed',
+    payload: { success: true }
+  });
+
+  console.log(`Push subscription added for user ${client.user.nickname}`);
+}
+
+// Send push notification to a user
+async function sendPushNotification(userId: string, title: string, body: string, data?: Record<string, unknown>): Promise<void> {
+  const subscriptions = pushSubscriptions.get(userId);
+  if (!subscriptions || subscriptions.length === 0) return;
+
+  const payload = JSON.stringify({
+    title,
+    body,
+    icon: '/favicon.ico',
+    tag: 'chat-message',
+    ...data
+  });
+
+  const failedSubscriptions: number[] = [];
+
+  await Promise.all(subscriptions.map(async (sub, index) => {
+    try {
+      await webpush.sendNotification(sub as webpush.PushSubscription, payload);
+    } catch (err: unknown) {
+      const error = err as { statusCode?: number };
+      console.error('Push notification failed:', error);
+      // Remove invalid subscriptions (410 Gone, 404 Not Found)
+      if (error.statusCode === 410 || error.statusCode === 404) {
+        failedSubscriptions.push(index);
+      }
+    }
+  }));
+
+  // Remove failed subscriptions
+  if (failedSubscriptions.length > 0) {
+    const validSubs = subscriptions.filter((_, i) => !failedSubscriptions.includes(i));
+    pushSubscriptions.set(userId, validSubs);
+  }
+}
+
+// Send push notifications to room members (except sender)
+async function sendPushToRoomMembers(roomId: string, senderId: string, title: string, body: string): Promise<void> {
+  const members = await database.getRoomMembers(roomId);
+
+  for (const member of members) {
+    // Skip sender and online users (they'll see it in the app)
+    if (member.id === senderId) continue;
+
+    // Only send to offline users
+    if (!isUserOnline(member.id)) {
+      await sendPushNotification(member.id, title, body, { roomId });
+    }
+  }
 }
 
 const PORT = process.env.PORT || 4545;

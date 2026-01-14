@@ -7,6 +7,7 @@ interface SidebarProps {
   user: { id: string; nickname: string };
   onSelectRoom: (room: Room) => void;
   onNewRoom: () => void;
+  onEditNickname: () => void;
   onLogout: () => void;
   showMobile?: boolean;
   onCloseMobile?: () => void;
@@ -18,6 +19,7 @@ export function Sidebar({
   user,
   onSelectRoom,
   onNewRoom,
+  onEditNickname,
   onLogout,
   showMobile
 }: SidebarProps) {
@@ -74,10 +76,15 @@ export function Sidebar({
         <div className="user-avatar" style={{ backgroundColor: avatarColor }}>
           {getInitials(user.nickname)}
         </div>
-        <div className="user-info">
+        <div className="user-info" onClick={onEditNickname} style={{ cursor: 'pointer' }} title="Click to change nickname">
           <span className="user-name">{user.nickname}</span>
           <span className="user-status">Online</span>
         </div>
+        <button className="btn-icon" onClick={onEditNickname} title="Edit nickname">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+        </button>
         <button className="btn-icon logout" onClick={onLogout} title="Logout">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>

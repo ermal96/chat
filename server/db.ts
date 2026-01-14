@@ -329,8 +329,12 @@ export const database = {
   },
 
   async deleteExpiredMessages(): Promise<number> {
-    // MongoDB TTL index handles this automatically
-    return 0;
+    // Manually delete expired messages (TTL index may not work in memory server)
+    const now = new Date();
+    const result = await Message.deleteMany({
+      expiresAt: { $lte: now }
+    });
+    return result.deletedCount;
   },
 
   async getExpiredMessageIds(): Promise<string[]> {
@@ -368,7 +372,15 @@ export const database = {
   },
 
   async getRoomMessages(roomId: string): Promise<MessageType[]> {
-    const messages = await Message.find({ roomId, deleted: false })
+    const now = new Date();
+    const messages = await Message.find({
+      roomId,
+      deleted: false,
+      $or: [
+        { expiresAt: { $gt: now } },
+        { expiresAt: { $exists: false } }
+      ]
+    })
       .sort({ createdAt: -1 })
       .limit(100);
     return messages.map(toMessageType).reverse();
@@ -478,7 +490,15 @@ export const database = {
   },
 
   async getChannelMessages(channelId: string): Promise<MessageType[]> {
-    const messages = await Message.find({ roomId: channelId, deleted: false })
+    const now = new Date();
+    const messages = await Message.find({
+      roomId: channelId,
+      deleted: false,
+      $or: [
+        { expiresAt: { $gt: now } },
+        { expiresAt: { $exists: false } }
+      ]
+    })
       .sort({ createdAt: -1 })
       .limit(100);
     return messages.map(toMessageType).reverse();
