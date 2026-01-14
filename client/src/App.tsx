@@ -30,25 +30,48 @@ function requestNotificationPermission() {
   }
 }
 
-// Play notification sound
+// Play notification sound - pleasant two-tone chime
 function playNotificationSound() {
   try {
-    // Create and play a simple notification sound
     const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
 
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    // First note - E5 (659 Hz)
+    const osc1 = audioContext.createOscillator();
+    const gain1 = audioContext.createGain();
+    osc1.connect(gain1);
+    gain1.connect(audioContext.destination);
+    osc1.frequency.value = 659;
+    osc1.type = 'sine';
+    gain1.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+    osc1.start(audioContext.currentTime);
+    osc1.stop(audioContext.currentTime + 0.15);
 
-    oscillator.frequency.value = 800; // Hz
-    oscillator.type = 'sine';
+    // Second note - G5 (784 Hz) - slightly delayed
+    const osc2 = audioContext.createOscillator();
+    const gain2 = audioContext.createGain();
+    osc2.connect(gain2);
+    gain2.connect(audioContext.destination);
+    osc2.frequency.value = 784;
+    osc2.type = 'sine';
+    gain2.gain.setValueAtTime(0, audioContext.currentTime);
+    gain2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    osc2.start(audioContext.currentTime + 0.1);
+    osc2.stop(audioContext.currentTime + 0.3);
 
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
+    // Third note - C6 (1047 Hz) - final high note
+    const osc3 = audioContext.createOscillator();
+    const gain3 = audioContext.createGain();
+    osc3.connect(gain3);
+    gain3.connect(audioContext.destination);
+    osc3.frequency.value = 1047;
+    osc3.type = 'sine';
+    gain3.gain.setValueAtTime(0, audioContext.currentTime);
+    gain3.gain.setValueAtTime(0.25, audioContext.currentTime + 0.2);
+    gain3.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    osc3.start(audioContext.currentTime + 0.2);
+    osc3.stop(audioContext.currentTime + 0.5);
   } catch (e) {
     console.log('Could not play notification sound:', e);
   }
