@@ -45,7 +45,7 @@ const MessageSchema = new Schema<IMessage>({
   roomId: { type: String, required: true },
   userId: { type: String, required: true },
   nickname: { type: String, required: true },
-  content: { type: String, required: true },
+  content: { type: String, default: '' },
   imageUrl: { type: String },
   edited: { type: Boolean, default: false },
   editedAt: { type: Date },

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent, ChangeEvent, ClipboardEvent } from 'react';
+import { useState, useEffect, useRef, FormEvent } from 'react';
 import type { Message } from '../../../shared/types';
 import { EmojiPicker } from './EmojiPicker';
 import { GifPicker } from './GifPicker';
@@ -21,11 +21,9 @@ export function MessageInput({
   const [content, setContent] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showGif, setShowGif] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Focus input when replying
@@ -56,10 +54,7 @@ export function MessageInput({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
 
-    const hasContent = content.trim().length > 0;
-    const hasImage = imagePreview !== null;
-
-    if (!hasContent && !hasImage) return;
+    if (!content.trim()) return;
 
     // Clear typing state
     if (typingTimeoutRef.current) {
@@ -70,9 +65,8 @@ export function MessageInput({
       onTypingStop();
     }
 
-    onSend(content.trim(), imagePreview || undefined);
+    onSend(content.trim());
     setContent('');
-    setImagePreview(null);
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -86,66 +80,8 @@ export function MessageInput({
     onSend('', gifUrl);
   };
 
-  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Convert to base64 for preview and sending
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleImageClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const removeImage = () => {
-    setImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handlePaste = (e: ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-
-      // Check for image types
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            setImagePreview(reader.result as string);
-          };
-          reader.readAsDataURL(file);
-        }
-        return;
-      }
-
-      // Check for pasted URLs that look like image URLs
-      if (item.type === 'text/plain') {
-        item.getAsString((text) => {
-          const imageUrlPattern = /\.(gif|jpe?g|png|webp|bmp)(\?.*)?$/i;
-          const gifUrlPattern = /(giphy\.com|tenor\.com|imgur\.com).*\.(gif|webp)/i;
-
-          if (imageUrlPattern.test(text) || gifUrlPattern.test(text)) {
-            setImagePreview(text.trim());
-          }
-        });
-      }
-    }
-  };
-
   return (
-    <div className="message-input-container" ref={containerRef} onPaste={handlePaste}>
+    <div className="message-input-container" ref={containerRef}>
       {replyingTo && (
         <div className="reply-bar">
           <div className="reply-info">
@@ -156,13 +92,6 @@ export function MessageInput({
           <button className="cancel-reply" onClick={onCancelReply} type="button">
             ✕
           </button>
-        </div>
-      )}
-
-      {imagePreview && (
-        <div className="image-preview">
-          <img src={imagePreview} alt="Preview" />
-          <button className="remove-image" onClick={removeImage} type="button">✕</button>
         </div>
       )}
 
@@ -192,23 +121,6 @@ export function MessageInput({
             GIF
           </button>
 
-          <button
-            type="button"
-            className="input-action-btn"
-            onClick={handleImageClick}
-            title="Upload Image"
-          >
-            📷
-          </button>
-
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImageChange}
-            accept="image/*"
-            style={{ display: 'none' }}
-          />
-
           <input
             ref={inputRef}
             type="text"
@@ -221,7 +133,7 @@ export function MessageInput({
             autoComplete="off"
           />
 
-          <button type="submit" className="send-btn" disabled={!content.trim() && !imagePreview}>
+          <button type="submit" className="send-btn" disabled={!content.trim()}>
             <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
               <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
             </svg>
