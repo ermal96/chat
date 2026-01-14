@@ -4,7 +4,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ChatScreen } from './components/ChatScreen';
 import { Toast } from './components/Toast';
-import type { Room, Message, ServerMessage } from '../../shared/types';
+import type { Room, Message, ServerMessage, Reaction } from '../../shared/types';
 
 interface UserData {
   id: string;
@@ -17,12 +17,19 @@ export interface ToastMessage {
   type: 'success' | 'error' | 'info';
 }
 
+interface TypingUser {
+  id: string;
+  nickname: string;
+}
+
 export default function App() {
   const [user, setUser] = useLocalStorage<UserData | null>('chat-user', null);
   const [rooms, setRooms] = useState<Map<string, Room>>(new Map());
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Map<string, Message[]>>(new Map());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser[]>>(new Map());
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
   const showToast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
     const id = Date.now().toString();
@@ -71,6 +78,87 @@ export default function App() {
         setMessages(prev => {
           const roomMsgs = prev.get(payload.message.roomId) || [];
           return new Map(prev).set(payload.message.roomId, [...roomMsgs, payload.message]);
+        });
+        break;
+      }
+
+      case 'message_edited': {
+        const payload = msg.payload as { roomId: string; messageId: string; content: string; editedAt: string };
+        setMessages(prev => {
+          const roomMsgs = prev.get(payload.roomId) || [];
+          const updated = roomMsgs.map(m =>
+            m.id === payload.messageId
+              ? { ...m, content: payload.content, edited: true, editedAt: payload.editedAt }
+              : m
+          );
+          return new Map(prev).set(payload.roomId, updated);
+        });
+        break;
+      }
+
+      case 'message_deleted': {
+        const payload = msg.payload as { roomId: string; messageId: string };
+        setMessages(prev => {
+          const roomMsgs = prev.get(payload.roomId) || [];
+          const updated = roomMsgs.filter(m => m.id !== payload.messageId);
+          return new Map(prev).set(payload.roomId, updated);
+        });
+        break;
+      }
+
+      case 'reaction_added':
+      case 'reaction_removed': {
+        const payload = msg.payload as { roomId: string; messageId: string; emoji: string; userId: string };
+        setMessages(prev => {
+          const roomMsgs = prev.get(payload.roomId) || [];
+          const updated = roomMsgs.map(m => {
+            if (m.id !== payload.messageId) return m;
+
+            const reactions = [...(m.reactions || [])];
+            const existingReaction = reactions.find(r => r.emoji === payload.emoji);
+
+            if (msg.type === 'reaction_added') {
+              if (existingReaction) {
+                if (!existingReaction.users.includes(payload.userId)) {
+                  existingReaction.users.push(payload.userId);
+                }
+              } else {
+                reactions.push({ emoji: payload.emoji, users: [payload.userId] });
+              }
+            } else {
+              if (existingReaction) {
+                existingReaction.users = existingReaction.users.filter(u => u !== payload.userId);
+                if (existingReaction.users.length === 0) {
+                  const idx = reactions.indexOf(existingReaction);
+                  reactions.splice(idx, 1);
+                }
+              }
+            }
+
+            return { ...m, reactions };
+          });
+          return new Map(prev).set(payload.roomId, updated);
+        });
+        break;
+      }
+
+      case 'typing': {
+        const payload = msg.payload as { roomId: string; users: { id: string; nickname: string }[] };
+        setTypingUsers(prev => new Map(prev).set(payload.roomId, payload.users));
+        break;
+      }
+
+      case 'user_online':
+      case 'user_offline': {
+        const payload = msg.payload as { roomId: string; userId: string };
+        setRooms(prev => {
+          const room = prev.get(payload.roomId);
+          if (!room) return prev;
+          const onlineMembers = room.onlineMembers || [];
+          const updated = msg.type === 'user_online'
+            ? [...new Set([...onlineMembers, payload.userId])]
+            : onlineMembers.filter(id => id !== payload.userId);
+          return new Map(prev).set(payload.roomId, { ...room, onlineMembers: updated });
         });
         break;
       }
@@ -155,8 +243,64 @@ export default function App() {
 
   const handleSendMessage = (content: string) => {
     if (currentRoom) {
-      send('send_message', { roomId: currentRoom.id, content });
+      const payload: { roomId: string; content: string; replyTo?: { id: string; nickname: string; content: string } } = {
+        roomId: currentRoom.id,
+        content
+      };
+      if (replyingTo) {
+        payload.replyTo = {
+          id: replyingTo.id,
+          nickname: replyingTo.nickname,
+          content: replyingTo.content.slice(0, 100)
+        };
+        setReplyingTo(null);
+      }
+      send('send_message', payload);
     }
+  };
+
+  const handleEditMessage = (messageId: string, content: string) => {
+    if (currentRoom) {
+      send('edit_message', { messageId, roomId: currentRoom.id, content });
+    }
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    if (currentRoom) {
+      send('delete_message', { messageId, roomId: currentRoom.id });
+    }
+  };
+
+  const handleAddReaction = (messageId: string, emoji: string) => {
+    if (currentRoom) {
+      send('add_reaction', { messageId, roomId: currentRoom.id, emoji });
+    }
+  };
+
+  const handleRemoveReaction = (messageId: string, emoji: string) => {
+    if (currentRoom) {
+      send('remove_reaction', { messageId, roomId: currentRoom.id, emoji });
+    }
+  };
+
+  const handleTypingStart = () => {
+    if (currentRoom) {
+      send('typing_start', { roomId: currentRoom.id });
+    }
+  };
+
+  const handleTypingStop = () => {
+    if (currentRoom) {
+      send('typing_stop', { roomId: currentRoom.id });
+    }
+  };
+
+  const handleReply = (message: Message) => {
+    setReplyingTo(message);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
   };
 
   const handleLeaveRoom = (roomId: string) => {
@@ -165,14 +309,13 @@ export default function App() {
 
   const handleSelectRoom = (room: Room) => {
     setCurrentRoom(room);
-    // Request message history if we don't have it
+    setReplyingTo(null);
     if (!messages.has(room.id)) {
       send('get_rooms', {});
     }
   };
 
   const handleLogout = () => {
-    // Leave all rooms
     rooms.forEach(room => {
       send('leave_room', { roomId: room.id });
     });
@@ -180,6 +323,7 @@ export default function App() {
     setRooms(new Map());
     setCurrentRoom(null);
     setMessages(new Map());
+    setReplyingTo(null);
   };
 
   const isLoggedIn = user && rooms.size > 0;
@@ -198,8 +342,18 @@ export default function App() {
           rooms={rooms}
           currentRoom={currentRoom}
           messages={messages.get(currentRoom?.id || '') || []}
+          typingUsers={typingUsers.get(currentRoom?.id || '') || []}
+          replyingTo={replyingTo}
           onSelectRoom={handleSelectRoom}
           onSendMessage={handleSendMessage}
+          onEditMessage={handleEditMessage}
+          onDeleteMessage={handleDeleteMessage}
+          onAddReaction={handleAddReaction}
+          onRemoveReaction={handleRemoveReaction}
+          onTypingStart={handleTypingStart}
+          onTypingStop={handleTypingStop}
+          onReply={handleReply}
+          onCancelReply={handleCancelReply}
           onLeaveRoom={handleLeaveRoom}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}

@@ -10,10 +10,16 @@ import {
   CreateRoomPayload,
   JoinRoomPayload,
   SendMessagePayload,
+  EditMessagePayload,
+  DeleteMessagePayload,
+  ReactionPayload,
+  TypingPayload,
   LeaveRoomPayload,
   ReconnectPayload,
   User,
-  Room
+  Room,
+  UserInfo,
+  getAvatarColor
 } from '../shared/types';
 
 const app = express();
@@ -38,9 +44,14 @@ interface ConnectedClient {
   ws: WebSocket;
   user: User | null;
   rooms: Set<string>;
+  typingIn: Set<string>; // Room IDs where user is typing
 }
 
 const clients: Map<WebSocket, ConnectedClient> = new Map();
+const userConnections: Map<string, Set<WebSocket>> = new Map(); // userId -> Set of connections
+
+// Typing timeout management
+const typingTimeouts: Map<string, NodeJS.Timeout> = new Map(); // `${roomId}:${oderId}` -> timeout
 
 // Helper to send message to a client
 function send(ws: WebSocket, message: ServerMessage): void {
@@ -58,14 +69,67 @@ function broadcastToRoom(roomId: string, message: ServerMessage, excludeWs?: Web
   });
 }
 
+// Get online members for a room
+function getOnlineMembers(roomId: string): UserInfo[] {
+  const online: UserInfo[] = [];
+  const seenUsers = new Set<string>();
+
+  clients.forEach((client) => {
+    if (client.user && client.rooms.has(roomId) && !seenUsers.has(client.user.id)) {
+      seenUsers.add(client.user.id);
+      online.push({
+        id: client.user.id,
+        nickname: client.user.nickname,
+        isOnline: true,
+        avatar: getAvatarColor(client.user.id)
+      });
+    }
+  });
+
+  return online;
+}
+
 // Serialize room for sending to client
-function serializeRoom(room: Room): Room & { memberCount: number; members: { id: string; nickname: string }[] } {
+function serializeRoom(room: Room): Room {
   const members = database.getRoomMembers(room.id);
+  const onlineMembers = getOnlineMembers(room.id);
+  const onlineIds = onlineMembers.map(m => m.id);
+
   return {
     ...room,
     memberCount: members.length,
-    members
+    members: members.map(m => ({
+      ...m,
+      isOnline: onlineIds.includes(m.id),
+      avatar: getAvatarColor(m.id)
+    })),
+    onlineMembers: onlineIds
   };
+}
+
+// Track user connection
+function trackUserConnection(userId: string, ws: WebSocket): void {
+  if (!userConnections.has(userId)) {
+    userConnections.set(userId, new Set());
+  }
+  userConnections.get(userId)!.add(ws);
+}
+
+// Untrack user connection
+function untrackUserConnection(userId: string, ws: WebSocket): void {
+  const connections = userConnections.get(userId);
+  if (connections) {
+    connections.delete(ws);
+    if (connections.size === 0) {
+      userConnections.delete(userId);
+    }
+  }
+}
+
+// Check if user is online (has any connection)
+function isUserOnline(userId: string): boolean {
+  const connections = userConnections.get(userId);
+  return connections ? connections.size > 0 : false;
 }
 
 wss.on('connection', (ws: WebSocket) => {
@@ -75,7 +139,8 @@ wss.on('connection', (ws: WebSocket) => {
   const client: ConnectedClient = {
     ws,
     user: null,
-    rooms: new Set()
+    rooms: new Set(),
+    typingIn: new Set()
   };
   clients.set(ws, client);
 
@@ -93,16 +158,38 @@ wss.on('connection', (ws: WebSocket) => {
     const client = clients.get(ws);
 
     if (client && client.user) {
-      // Notify rooms about user disconnection
-      client.rooms.forEach(roomId => {
+      const userId = client.user.id;
+      const nickname = client.user.nickname;
+
+      // Clear typing indicators
+      client.typingIn.forEach(roomId => {
+        const key = `${roomId}:${userId}`;
+        const timeout = typingTimeouts.get(key);
+        if (timeout) {
+          clearTimeout(timeout);
+          typingTimeouts.delete(key);
+        }
         broadcastToRoom(roomId, {
-          type: 'user_left',
-          payload: {
-            roomId,
-            user: { id: client.user!.id, nickname: client.user!.nickname }
-          }
-        }, ws);
+          type: 'typing',
+          payload: { roomId, oderId: userId, nickname, isTyping: false }
+        });
       });
+
+      // Untrack connection
+      untrackUserConnection(userId, ws);
+
+      // If user has no more connections, notify rooms they're offline
+      if (!isUserOnline(userId)) {
+        client.rooms.forEach(roomId => {
+          broadcastToRoom(roomId, {
+            type: 'user_offline',
+            payload: {
+              roomId,
+              user: { id: userId, nickname, avatar: getAvatarColor(userId) }
+            }
+          });
+        });
+      }
     }
 
     clients.delete(ws);
@@ -126,6 +213,24 @@ function handleMessage(ws: WebSocket, message: ClientMessage): void {
     case 'send_message':
       handleSendMessage(ws, client, message.payload as SendMessagePayload);
       break;
+    case 'edit_message':
+      handleEditMessage(ws, client, message.payload as EditMessagePayload);
+      break;
+    case 'delete_message':
+      handleDeleteMessage(ws, client, message.payload as DeleteMessagePayload);
+      break;
+    case 'add_reaction':
+      handleAddReaction(ws, client, message.payload as ReactionPayload);
+      break;
+    case 'remove_reaction':
+      handleRemoveReaction(ws, client, message.payload as ReactionPayload);
+      break;
+    case 'typing_start':
+      handleTypingStart(ws, client, message.payload as TypingPayload);
+      break;
+    case 'typing_stop':
+      handleTypingStop(ws, client, message.payload as TypingPayload);
+      break;
     case 'get_rooms':
       handleGetRooms(ws, client);
       break;
@@ -146,6 +251,7 @@ function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: Creat
   // Create or reuse user
   const id = userId || generateId();
   client.user = database.createOrUpdateUser(id, nickname);
+  trackUserConnection(id, ws);
 
   // Generate unique invite code
   let inviteCode = generateInviteCode();
@@ -161,7 +267,7 @@ function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: Creat
     type: 'room_created',
     payload: {
       room: serializeRoom(room),
-      user: { id: client.user.id, nickname: client.user.nickname }
+      user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(client.user.id) }
     }
   });
 
@@ -184,7 +290,9 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
 
   // Create or reuse user
   const id = userId || generateId();
+  const wasOnline = isUserOnline(id);
   client.user = database.createOrUpdateUser(id, nickname);
+  trackUserConnection(id, ws);
 
   // Check if already in room (in this session)
   if (client.rooms.has(room.id)) {
@@ -196,12 +304,14 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
   database.addMemberToRoom(room.id, client.user.id);
   client.rooms.add(room.id);
 
+  const userInfo = { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(client.user.id) };
+
   // Send room info to joining user
   send(ws, {
     type: 'room_joined',
     payload: {
       room: serializeRoom(room),
-      user: { id: client.user.id, nickname: client.user.nickname }
+      user: userInfo
     }
   });
 
@@ -217,11 +327,16 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
   // Notify others in the room
   broadcastToRoom(room.id, {
     type: 'user_joined',
-    payload: {
-      roomId: room.id,
-      user: { id: client.user.id, nickname: client.user.nickname }
-    }
+    payload: { roomId: room.id, user: userInfo }
   }, ws);
+
+  // If user just came online, notify
+  if (!wasOnline) {
+    broadcastToRoom(room.id, {
+      type: 'user_online',
+      payload: { roomId: room.id, user: userInfo }
+    }, ws);
+  }
 
   console.log(`${nickname} joined room: ${room.name}`);
 }
@@ -238,6 +353,9 @@ function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveR
   database.removeMemberFromRoom(roomId, client.user.id);
   client.rooms.delete(roomId);
 
+  // Clear typing
+  client.typingIn.delete(roomId);
+
   send(ws, {
     type: 'room_left',
     payload: { roomId }
@@ -248,7 +366,7 @@ function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveR
     type: 'user_left',
     payload: {
       roomId,
-      user: { id: client.user.id, nickname: client.user.nickname }
+      user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(client.user.id) }
     }
   });
 
@@ -256,7 +374,7 @@ function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveR
 }
 
 function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: SendMessagePayload): void {
-  const { roomId, content } = payload;
+  const { roomId, content, replyTo } = payload;
 
   if (!client.user) {
     send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
@@ -273,14 +391,143 @@ function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: Send
     return;
   }
 
+  // Stop typing indicator
+  handleTypingStop(ws, client, { roomId });
+
   const messageId = generateId();
-  const message = database.addMessage(messageId, roomId, client.user.id, client.user.nickname, content.trim());
+  const message = database.addMessage(messageId, roomId, client.user.id, client.user.nickname, content.trim(), replyTo);
 
   // Broadcast to all room members including sender
   broadcastToRoom(roomId, {
     type: 'new_message',
     payload: { message }
   });
+}
+
+function handleEditMessage(ws: WebSocket, client: ConnectedClient, payload: EditMessagePayload): void {
+  const { messageId, roomId, content } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!content || content.trim().length === 0) {
+    send(ws, { type: 'error', payload: { message: 'Message cannot be empty' } });
+    return;
+  }
+
+  const updated = database.editMessage(messageId, client.user.id, content.trim());
+  if (!updated) {
+    send(ws, { type: 'error', payload: { message: 'Cannot edit this message' } });
+    return;
+  }
+
+  broadcastToRoom(roomId, {
+    type: 'message_edited',
+    payload: { messageId, roomId, content: content.trim(), editedAt: new Date().toISOString() }
+  });
+}
+
+function handleDeleteMessage(ws: WebSocket, client: ConnectedClient, payload: DeleteMessagePayload): void {
+  const { messageId, roomId } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  const deleted = database.deleteMessage(messageId, client.user.id);
+  if (!deleted) {
+    send(ws, { type: 'error', payload: { message: 'Cannot delete this message' } });
+    return;
+  }
+
+  broadcastToRoom(roomId, {
+    type: 'message_deleted',
+    payload: { messageId, roomId }
+  });
+}
+
+function handleAddReaction(ws: WebSocket, client: ConnectedClient, payload: ReactionPayload): void {
+  const { messageId, roomId, emoji } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  database.addReaction(messageId, client.user.id, emoji);
+
+  broadcastToRoom(roomId, {
+    type: 'reaction_added',
+    payload: { messageId, roomId, oderId: client.user.id, emoji }
+  });
+}
+
+function handleRemoveReaction(ws: WebSocket, client: ConnectedClient, payload: ReactionPayload): void {
+  const { messageId, roomId, emoji } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  database.removeReaction(messageId, client.user.id, emoji);
+
+  broadcastToRoom(roomId, {
+    type: 'reaction_removed',
+    payload: { messageId, roomId, oderId: client.user.id, emoji }
+  });
+}
+
+function handleTypingStart(ws: WebSocket, client: ConnectedClient, payload: TypingPayload): void {
+  const { roomId } = payload;
+
+  if (!client.user || !client.rooms.has(roomId)) return;
+
+  const key = `${roomId}:${client.user.id}`;
+
+  // Clear existing timeout
+  const existing = typingTimeouts.get(key);
+  if (existing) clearTimeout(existing);
+
+  // Only broadcast if not already typing
+  if (!client.typingIn.has(roomId)) {
+    client.typingIn.add(roomId);
+    broadcastToRoom(roomId, {
+      type: 'typing',
+      payload: { roomId, oderId: client.user.id, nickname: client.user.nickname, isTyping: true }
+    }, ws);
+  }
+
+  // Auto-stop after 3 seconds
+  typingTimeouts.set(key, setTimeout(() => {
+    handleTypingStop(ws, client, payload);
+  }, 3000));
+}
+
+function handleTypingStop(ws: WebSocket, client: ConnectedClient, payload: TypingPayload): void {
+  const { roomId } = payload;
+
+  if (!client.user) return;
+
+  const key = `${roomId}:${client.user.id}`;
+
+  // Clear timeout
+  const existing = typingTimeouts.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    typingTimeouts.delete(key);
+  }
+
+  if (client.typingIn.has(roomId)) {
+    client.typingIn.delete(roomId);
+    broadcastToRoom(roomId, {
+      type: 'typing',
+      payload: { roomId, oderId: client.user.id, nickname: client.user.nickname, isTyping: false }
+    }, ws);
+  }
 }
 
 function handleGetRooms(ws: WebSocket, client: ConnectedClient): void {
@@ -301,27 +548,33 @@ function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: Reconn
     return;
   }
 
+  const wasOnline = isUserOnline(userId);
+
   // Get or create user
   client.user = database.createOrUpdateUser(userId, nickname);
+  trackUserConnection(userId, ws);
 
   // Get user's rooms from database
   const rooms = database.getUserRooms(userId);
   rooms.forEach(room => {
     client.rooms.add(room.id);
-    // Notify room members that user is back online
-    broadcastToRoom(room.id, {
-      type: 'user_joined',
-      payload: {
-        roomId: room.id,
-        user: { id: client.user!.id, nickname: client.user!.nickname }
-      }
-    }, ws);
+
+    // If user just came online, notify room members
+    if (!wasOnline) {
+      broadcastToRoom(room.id, {
+        type: 'user_online',
+        payload: {
+          roomId: room.id,
+          user: { id: userId, nickname, avatar: getAvatarColor(userId) }
+        }
+      }, ws);
+    }
   });
 
   send(ws, {
     type: 'reconnected',
     payload: {
-      user: { id: client.user.id, nickname: client.user.nickname },
+      user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(userId) },
       rooms: rooms.map(serializeRoom)
     }
   });
@@ -339,6 +592,10 @@ server.listen(Number(PORT), HOST, () => {
 // Graceful shutdown
 const shutdown = () => {
   console.log('Shutting down gracefully...');
+
+  // Clear all typing timeouts
+  typingTimeouts.forEach(timeout => clearTimeout(timeout));
+  typingTimeouts.clear();
 
   // Close all WebSocket connections
   clients.forEach((_client, ws) => {

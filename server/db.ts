@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { Room, User, Message, RoomType } from '../shared/types';
+import { Room, User, Message, RoomType, Reaction } from '../shared/types';
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, '../../data/chat.db');
 
@@ -45,20 +45,55 @@ db.exec(`
     nickname TEXT NOT NULL,
     content TEXT NOT NULL,
     timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    edited INTEGER DEFAULT 0,
+    edited_at TEXT,
+    deleted INTEGER DEFAULT 0,
+    reply_to_id TEXT,
+    reply_to_nickname TEXT,
+    reply_to_content TEXT,
     FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS reactions (
+    message_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, user_id, emoji),
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id);
   CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
   CREATE INDEX IF NOT EXISTS idx_rooms_invite_code ON rooms(invite_code);
+  CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
 `);
+
+// Add columns if they don't exist (for migration)
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN edited INTEGER DEFAULT 0');
+} catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN edited_at TEXT');
+} catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN deleted INTEGER DEFAULT 0');
+} catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN reply_to_id TEXT');
+} catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN reply_to_nickname TEXT');
+} catch { /* Column exists */ }
+try {
+  db.exec('ALTER TABLE messages ADD COLUMN reply_to_content TEXT');
+} catch { /* Column exists */ }
 
 // Prepared statements
 const stmts = {
   // Users
   createUser: db.prepare('INSERT OR REPLACE INTO users (id, nickname) VALUES (?, ?)'),
   getUser: db.prepare('SELECT * FROM users WHERE id = ?'),
-  updateNickname: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
 
   // Rooms
   createRoom: db.prepare('INSERT INTO rooms (id, invite_code, name, type) VALUES (?, ?, ?, ?)'),
@@ -80,13 +115,83 @@ const stmts = {
     WHERE rm.user_id = ?
   `),
   getMemberCount: db.prepare('SELECT COUNT(*) as count FROM room_members WHERE room_id = ?'),
-  isUserInRoom: db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?'),
 
   // Messages
-  addMessage: db.prepare('INSERT INTO messages (id, room_id, user_id, nickname, content, timestamp) VALUES (?, ?, ?, ?, ?, ?)'),
-  getRoomMessages: db.prepare('SELECT * FROM messages WHERE room_id = ? ORDER BY timestamp DESC LIMIT 100'),
-  deleteOldMessages: db.prepare('DELETE FROM messages WHERE room_id = ? AND id NOT IN (SELECT id FROM messages WHERE room_id = ? ORDER BY timestamp DESC LIMIT 100)'),
+  addMessage: db.prepare(`
+    INSERT INTO messages (id, room_id, user_id, nickname, content, timestamp, reply_to_id, reply_to_nickname, reply_to_content)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+  getMessage: db.prepare('SELECT * FROM messages WHERE id = ?'),
+  editMessage: db.prepare('UPDATE messages SET content = ?, edited = 1, edited_at = ? WHERE id = ? AND user_id = ? AND deleted = 0'),
+  deleteMessage: db.prepare('UPDATE messages SET deleted = 1, content = "[Message deleted]" WHERE id = ? AND user_id = ?'),
+  getRoomMessages: db.prepare(`
+    SELECT * FROM messages
+    WHERE room_id = ? AND deleted = 0
+    ORDER BY timestamp DESC
+    LIMIT 100
+  `),
+
+  // Reactions
+  addReaction: db.prepare('INSERT OR IGNORE INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)'),
+  removeReaction: db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?'),
+  getMessageReactions: db.prepare('SELECT emoji, user_id FROM reactions WHERE message_id = ?'),
 };
+
+// Helper to get reactions for messages
+function getReactionsForMessage(messageId: string): Reaction[] {
+  const rows = stmts.getMessageReactions.all(messageId) as { emoji: string; user_id: string }[];
+  const reactionMap = new Map<string, string[]>();
+
+  rows.forEach(row => {
+    if (!reactionMap.has(row.emoji)) {
+      reactionMap.set(row.emoji, []);
+    }
+    reactionMap.get(row.emoji)!.push(row.user_id);
+  });
+
+  return Array.from(reactionMap.entries()).map(([emoji, users]) => ({ emoji, users }));
+}
+
+interface MessageRow {
+  id: string;
+  room_id: string;
+  user_id: string;
+  nickname: string;
+  content: string;
+  timestamp: string;
+  edited: number;
+  edited_at: string | null;
+  reply_to_id: string | null;
+  reply_to_nickname: string | null;
+  reply_to_content: string | null;
+}
+
+function rowToMessage(row: MessageRow): Message {
+  const message: Message = {
+    id: row.id,
+    roomId: row.room_id,
+    userId: row.user_id,
+    nickname: row.nickname,
+    content: row.content,
+    timestamp: row.timestamp,
+    reactions: getReactionsForMessage(row.id)
+  };
+
+  if (row.edited) {
+    message.edited = true;
+    message.editedAt = row.edited_at || undefined;
+  }
+
+  if (row.reply_to_id) {
+    message.replyTo = {
+      id: row.reply_to_id,
+      nickname: row.reply_to_nickname || '',
+      content: row.reply_to_content || ''
+    };
+  }
+
+  return message;
+}
 
 export const database = {
   // User operations
@@ -144,7 +249,6 @@ export const database = {
 
   removeMemberFromRoom(roomId: string, userId: string): void {
     stmts.removeMember.run(roomId, userId);
-    // Check if room is empty and delete it
     const count = stmts.getMemberCount.get(roomId) as { count: number };
     if (count.count === 0) {
       stmts.deleteRoom.run(roomId);
@@ -160,10 +264,6 @@ export const database = {
     return result.count;
   },
 
-  isUserInRoom(roomId: string, userId: string): boolean {
-    return !!stmts.isUserInRoom.get(roomId, userId);
-  },
-
   getUserRooms(userId: string): Room[] {
     const rows = stmts.getUserRooms.all(userId) as { id: string; invite_code: string; name: string; type: RoomType; created_at: string }[];
     return rows.map(row => ({
@@ -176,22 +276,54 @@ export const database = {
   },
 
   // Message operations
-  addMessage(id: string, roomId: string, userId: string, nickname: string, content: string): Message {
+  addMessage(
+    id: string,
+    roomId: string,
+    userId: string,
+    nickname: string,
+    content: string,
+    replyTo?: { id: string; nickname: string; content: string }
+  ): Message {
     const timestamp = new Date().toISOString();
-    stmts.addMessage.run(id, roomId, userId, nickname, content, timestamp);
-    return { id, roomId, userId, nickname, content, timestamp };
+    stmts.addMessage.run(
+      id, roomId, userId, nickname, content, timestamp,
+      replyTo?.id || null, replyTo?.nickname || null, replyTo?.content || null
+    );
+    return {
+      id,
+      roomId,
+      userId,
+      nickname,
+      content,
+      timestamp,
+      replyTo,
+      reactions: []
+    };
+  },
+
+  editMessage(messageId: string, userId: string, content: string): boolean {
+    const editedAt = new Date().toISOString();
+    const result = stmts.editMessage.run(content, editedAt, messageId, userId);
+    return result.changes > 0;
+  },
+
+  deleteMessage(messageId: string, userId: string): boolean {
+    const result = stmts.deleteMessage.run(messageId, userId);
+    return result.changes > 0;
   },
 
   getRoomMessages(roomId: string): Message[] {
-    const rows = stmts.getRoomMessages.all(roomId) as { id: string; room_id: string; user_id: string; nickname: string; content: string; timestamp: string }[];
-    return rows.map(row => ({
-      id: row.id,
-      roomId: row.room_id,
-      userId: row.user_id,
-      nickname: row.nickname,
-      content: row.content,
-      timestamp: row.timestamp
-    })).reverse(); // Return in chronological order
+    const rows = stmts.getRoomMessages.all(roomId) as MessageRow[];
+    return rows.map(rowToMessage).reverse();
+  },
+
+  // Reaction operations
+  addReaction(messageId: string, userId: string, emoji: string): void {
+    stmts.addReaction.run(messageId, userId, emoji);
+  },
+
+  removeReaction(messageId: string, userId: string, emoji: string): void {
+    stmts.removeReaction.run(messageId, userId, emoji);
   },
 
   // Check if invite code exists
