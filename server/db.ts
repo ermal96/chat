@@ -265,16 +265,25 @@ export const database = {
   },
 
   async loginUser(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
+    console.log(`Login attempt for: ${email.toLowerCase()}`);
     const row = stmts.getUserByEmail.get(email.toLowerCase()) as { id: string; nickname: string; created_at: string; email: string; password_hash: string } | undefined;
-    if (!row || !row.password_hash) {
+    if (!row) {
+      console.log(`User not found: ${email.toLowerCase()}`);
+      return { success: false, error: 'Invalid email or password' };
+    }
+    if (!row.password_hash) {
+      console.log(`User has no password: ${email.toLowerCase()}`);
       return { success: false, error: 'Invalid email or password' };
     }
 
+    console.log(`Found user: ${row.nickname}, checking password...`);
     const valid = await bcrypt.compare(password, row.password_hash);
     if (!valid) {
+      console.log(`Password mismatch for: ${email.toLowerCase()}`);
       return { success: false, error: 'Invalid email or password' };
     }
 
+    console.log(`Login successful for: ${row.nickname}`);
     return {
       success: true,
       user: { id: row.id, nickname: row.nickname, joinedAt: row.created_at, email: row.email }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'react';
+import { useState, useEffect, useRef, FormEvent, ChangeEvent, ClipboardEvent } from 'react';
 import type { Message } from '../../../shared/types';
 import { EmojiPicker } from './EmojiPicker';
 import { GifPicker } from './GifPicker';
@@ -26,6 +26,7 @@ export function MessageInput({
   const isTypingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Focus input when replying
   useEffect(() => {
@@ -108,8 +109,43 @@ export function MessageInput({
     }
   };
 
+  const handlePaste = (e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      // Check for image types
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setImagePreview(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+        }
+        return;
+      }
+
+      // Check for pasted URLs that look like image URLs
+      if (item.type === 'text/plain') {
+        item.getAsString((text) => {
+          const imageUrlPattern = /\.(gif|jpe?g|png|webp|bmp)(\?.*)?$/i;
+          const gifUrlPattern = /(giphy\.com|tenor\.com|imgur\.com).*\.(gif|webp)/i;
+
+          if (imageUrlPattern.test(text) || gifUrlPattern.test(text)) {
+            setImagePreview(text.trim());
+          }
+        });
+      }
+    }
+  };
+
   return (
-    <div className="message-input-container">
+    <div className="message-input-container" ref={containerRef} onPaste={handlePaste}>
       {replyingTo && (
         <div className="reply-bar">
           <div className="reply-info">

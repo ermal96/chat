@@ -420,8 +420,8 @@ export default function App() {
     currentUserIdRef.current = null;
   };
 
-  // User is logged in if they have an email (registered) or have rooms (guest with active session)
-  const isLoggedIn = user && (user.email || rooms.size > 0);
+  // User is logged in if they have an email (registered user)
+  const isLoggedIn = user && user.email;
 
   // Show loading while reconnecting
   if (isReconnecting) {
@@ -439,11 +439,8 @@ export default function App() {
     <div className="app">
       {!isLoggedIn ? (
         <WelcomeScreen
-          onCreateRoom={handleCreateRoom}
-          onJoinRoom={handleJoinRoom}
           onRegister={handleRegister}
           onLogin={handleLogin}
-          savedNickname={user?.nickname}
           savedEmail={user?.email}
         />
       ) : (
