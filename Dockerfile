@@ -49,9 +49,9 @@ EXPOSE 4545
 ENV NODE_ENV=production
 ENV PORT=4545
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:4545/health || exit 1
+# Health check (use 127.0.0.1 to force IPv4)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:4545/health || exit 1
 
 # Start the application
 CMD ["node", "dist/server/index.js"]
