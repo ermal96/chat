@@ -2,8 +2,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 import path from 'path';
-import { roomManager } from './rooms';
-import { generateId } from './invite';
+import { database } from './db';
+import { generateInviteCode, generateId } from './invite';
 import {
   ClientMessage,
   ServerMessage,
@@ -11,6 +11,7 @@ import {
   JoinRoomPayload,
   SendMessagePayload,
   LeaveRoomPayload,
+  ReconnectPayload,
   User,
   Room
 } from '../shared/types';
@@ -24,8 +25,13 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Serve static files
-app.use(express.static(path.join(__dirname, '../../public')));
+// Serve static files from React build
+app.use(express.static(path.join(__dirname, '../client')));
+
+// SPA fallback - serve index.html for all other routes
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(__dirname, '../client/index.html'));
+});
 
 // Track connected clients
 interface ConnectedClient {
@@ -45,9 +51,6 @@ function send(ws: WebSocket, message: ServerMessage): void {
 
 // Helper to broadcast to room members
 function broadcastToRoom(roomId: string, message: ServerMessage, excludeWs?: WebSocket): void {
-  const room = roomManager.getRoomById(roomId);
-  if (!room) return;
-
   clients.forEach((client, ws) => {
     if (ws !== excludeWs && client.rooms.has(roomId)) {
       send(ws, message);
@@ -56,17 +59,12 @@ function broadcastToRoom(roomId: string, message: ServerMessage, excludeWs?: Web
 }
 
 // Serialize room for sending to client
-function serializeRoom(room: Room) {
+function serializeRoom(room: Room): Room & { memberCount: number; members: { id: string; nickname: string }[] } {
+  const members = database.getRoomMembers(room.id);
   return {
-    id: room.id,
-    inviteCode: room.inviteCode,
-    name: room.name,
-    type: room.type,
-    memberCount: room.members.size,
-    members: Array.from(room.members.values()).map(u => ({
-      id: u.id,
-      nickname: u.nickname
-    }))
+    ...room,
+    memberCount: members.length,
+    members
   };
 }
 
@@ -81,7 +79,7 @@ wss.on('connection', (ws: WebSocket) => {
   };
   clients.set(ws, client);
 
-  ws.on('message', (data: string) => {
+  ws.on('message', (data: Buffer) => {
     try {
       const message: ClientMessage = JSON.parse(data.toString());
       handleMessage(ws, message);
@@ -95,16 +93,15 @@ wss.on('connection', (ws: WebSocket) => {
     const client = clients.get(ws);
 
     if (client && client.user) {
-      // Remove user from all rooms and notify others
+      // Notify rooms about user disconnection
       client.rooms.forEach(roomId => {
-        roomManager.removeUserFromRoom(roomId, client.user!.id);
         broadcastToRoom(roomId, {
           type: 'user_left',
           payload: {
             roomId,
             user: { id: client.user!.id, nickname: client.user!.nickname }
           }
-        });
+        }, ws);
       });
     }
 
@@ -132,11 +129,14 @@ function handleMessage(ws: WebSocket, message: ClientMessage): void {
     case 'get_rooms':
       handleGetRooms(ws, client);
       break;
+    case 'reconnect':
+      handleReconnect(ws, client, message.payload as ReconnectPayload);
+      break;
   }
 }
 
 function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: CreateRoomPayload): void {
-  const { name, type, nickname } = payload;
+  const { name, type, nickname, userId } = payload;
 
   if (!name || !nickname) {
     send(ws, { type: 'error', payload: { message: 'Name and nickname are required' } });
@@ -144,15 +144,17 @@ function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: Creat
   }
 
   // Create or reuse user
-  if (!client.user) {
-    client.user = {
-      id: generateId(),
-      nickname,
-      joinedAt: new Date()
-    };
+  const id = userId || generateId();
+  client.user = database.createOrUpdateUser(id, nickname);
+
+  // Generate unique invite code
+  let inviteCode = generateInviteCode();
+  while (database.inviteCodeExists(inviteCode)) {
+    inviteCode = generateInviteCode();
   }
 
-  const room = roomManager.createRoom(name, type, client.user);
+  const roomId = generateId();
+  const room = database.createRoom(roomId, inviteCode, name, type, client.user.id);
   client.rooms.add(room.id);
 
   send(ws, {
@@ -163,42 +165,38 @@ function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: Creat
     }
   });
 
-  console.log(`Room created: ${room.name} (${room.inviteCode})`);
+  console.log(`Room created: ${room.name} (${room.inviteCode}) by ${nickname}`);
 }
 
 function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoomPayload): void {
-  const { inviteCode, nickname } = payload;
+  const { inviteCode, nickname, userId } = payload;
 
   if (!inviteCode || !nickname) {
     send(ws, { type: 'error', payload: { message: 'Invite code and nickname are required' } });
     return;
   }
 
-  const room = roomManager.getRoomByInviteCode(inviteCode);
+  const room = database.getRoomByInviteCode(inviteCode);
   if (!room) {
     send(ws, { type: 'error', payload: { message: 'Invalid invite code' } });
     return;
   }
 
-  // Check if already in room
+  // Create or reuse user
+  const id = userId || generateId();
+  client.user = database.createOrUpdateUser(id, nickname);
+
+  // Check if already in room (in this session)
   if (client.rooms.has(room.id)) {
     send(ws, { type: 'error', payload: { message: 'Already in this room' } });
     return;
   }
 
-  // Create or update user
-  if (!client.user) {
-    client.user = {
-      id: generateId(),
-      nickname,
-      joinedAt: new Date()
-    };
-  }
-
-  roomManager.addUserToRoom(room.id, client.user);
+  // Add user to room in database
+  database.addMemberToRoom(room.id, client.user.id);
   client.rooms.add(room.id);
 
-  // Send room info and history to joining user
+  // Send room info to joining user
   send(ws, {
     type: 'room_joined',
     payload: {
@@ -212,7 +210,7 @@ function handleJoinRoom(ws: WebSocket, client: ConnectedClient, payload: JoinRoo
     type: 'room_history',
     payload: {
       roomId: room.id,
-      messages: roomManager.getRoomMessages(room.id)
+      messages: database.getRoomMessages(room.id)
     }
   });
 
@@ -236,7 +234,8 @@ function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: LeaveR
     return;
   }
 
-  roomManager.removeUserFromRoom(roomId, client.user.id);
+  // Remove from database
+  database.removeMemberFromRoom(roomId, client.user.id);
   client.rooms.delete(roomId);
 
   send(ws, {
@@ -274,15 +273,14 @@ function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: Send
     return;
   }
 
-  const message = roomManager.addMessage(roomId, client.user.id, client.user.nickname, content.trim());
+  const messageId = generateId();
+  const message = database.addMessage(messageId, roomId, client.user.id, client.user.nickname, content.trim());
 
-  if (message) {
-    // Broadcast to all room members including sender
-    broadcastToRoom(roomId, {
-      type: 'new_message',
-      payload: { message }
-    });
-  }
+  // Broadcast to all room members including sender
+  broadcastToRoom(roomId, {
+    type: 'new_message',
+    payload: { message }
+  });
 }
 
 function handleGetRooms(ws: WebSocket, client: ConnectedClient): void {
@@ -291,8 +289,44 @@ function handleGetRooms(ws: WebSocket, client: ConnectedClient): void {
     return;
   }
 
-  const rooms = roomManager.getUserRooms(client.user.id).map(serializeRoom);
+  const rooms = database.getUserRooms(client.user.id).map(serializeRoom);
   send(ws, { type: 'room_list', payload: { rooms } });
+}
+
+function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: ReconnectPayload): void {
+  const { userId, nickname } = payload;
+
+  if (!userId || !nickname) {
+    send(ws, { type: 'error', payload: { message: 'User ID and nickname required for reconnect' } });
+    return;
+  }
+
+  // Get or create user
+  client.user = database.createOrUpdateUser(userId, nickname);
+
+  // Get user's rooms from database
+  const rooms = database.getUserRooms(userId);
+  rooms.forEach(room => {
+    client.rooms.add(room.id);
+    // Notify room members that user is back online
+    broadcastToRoom(room.id, {
+      type: 'user_joined',
+      payload: {
+        roomId: room.id,
+        user: { id: client.user!.id, nickname: client.user!.nickname }
+      }
+    }, ws);
+  });
+
+  send(ws, {
+    type: 'reconnected',
+    payload: {
+      user: { id: client.user.id, nickname: client.user.nickname },
+      rooms: rooms.map(serializeRoom)
+    }
+  });
+
+  console.log(`${nickname} reconnected with ${rooms.length} rooms`);
 }
 
 const PORT = process.env.PORT || 4545;
@@ -307,7 +341,7 @@ const shutdown = () => {
   console.log('Shutting down gracefully...');
 
   // Close all WebSocket connections
-  clients.forEach((client, ws) => {
+  clients.forEach((_client, ws) => {
     ws.close(1000, 'Server shutting down');
   });
 

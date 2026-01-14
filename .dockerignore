@@ -3,7 +3,9 @@ node_modules/
 
 # Build output (we rebuild in Docker)
 dist/
-public/js/
+
+# Data (persistent volume)
+data/
 
 # Git
 .git/
@@ -39,3 +41,7 @@ README.md
 # Tests
 coverage/
 .nyc_output/
+
+# Old files (if any)
+src/
+public/

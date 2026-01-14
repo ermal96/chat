@@ -1,26 +1,35 @@
 {
   "name": "invite-chat",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A chat app where friends can discuss in groups or directly via invite codes",
   "main": "dist/server/index.js",
   "scripts": {
+    "dev:server": "tsc -w",
+    "dev:client": "vite",
     "build:server": "tsc",
-    "build:client": "esbuild src/client/index.ts --bundle --outfile=public/js/app.js",
+    "build:client": "vite build",
     "build": "npm run build:server && npm run build:client",
     "start": "node dist/server/index.js",
     "dev": "npm run build && npm start"
   },
-  "keywords": ["chat", "websocket", "invite"],
+  "keywords": ["chat", "websocket", "invite", "react"],
   "license": "MIT",
   "dependencies": {
+    "better-sqlite3": "^11.0.0",
     "express": "^4.18.2",
     "ws": "^8.16.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
     "@types/ws": "^8.5.10",
-    "esbuild": "^0.19.0",
-    "typescript": "^5.3.0"
+    "@vitejs/plugin-react": "^4.2.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.10"
   }
 }

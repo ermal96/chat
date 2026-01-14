@@ -24,24 +24,21 @@ body {
   min-height: 100vh;
 }
 
-#app {
+.app {
   height: 100vh;
   overflow: hidden;
 }
 
-.screen {
-  display: none;
-  height: 100%;
-}
-
-.screen.active {
-  display: flex;
-}
-
 /* Welcome Screen */
+.welcome-screen {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .welcome-container {
   max-width: 800px;
-  margin: auto;
   padding: 2rem;
   text-align: center;
 }
@@ -156,7 +153,21 @@ body {
   background: var(--border);
 }
 
+.btn.cancel {
+  margin-top: 0.5rem;
+}
+
+.btn.logout {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
 /* Chat Layout */
+.chat-screen {
+  height: 100%;
+}
+
 .chat-layout {
   display: flex;
   height: 100%;
@@ -222,6 +233,9 @@ body {
   border-top: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 /* Chat Area */
@@ -244,10 +258,6 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.chat-area.hidden {
-  display: none;
 }
 
 .chat-header {
@@ -320,11 +330,10 @@ body {
   color: rgba(255, 255, 255, 0.6);
 }
 
-.system-message {
+.no-messages {
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.875rem;
-  padding: 0.5rem;
+  margin-top: 2rem;
 }
 
 /* Message Form */
@@ -370,10 +379,6 @@ body {
   z-index: 100;
 }
 
-.modal.hidden {
-  display: none;
-}
-
 .modal-content {
   background: var(--bg-light);
   padding: 2rem;
@@ -384,6 +389,11 @@ body {
 
 .modal-content h3 {
   margin-bottom: 1rem;
+}
+
+.modal-content p {
+  margin-bottom: 1rem;
+  color: var(--text-muted);
 }
 
 .modal-content input,
@@ -421,11 +431,8 @@ body {
 }
 
 .tab-content {
-  display: none;
-}
-
-.tab-content.active {
-  display: block;
+  display: flex;
+  flex-direction: column;
 }
 
 .invite-code-display {
@@ -447,7 +454,7 @@ body {
 }
 
 /* Toast */
-#toast-container {
+.toast-container {
   position: fixed;
   bottom: 1rem;
   right: 1rem;

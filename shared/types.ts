@@ -6,15 +6,20 @@ export interface Room {
   inviteCode: string;
   name: string;
   type: RoomType;
-  createdAt: Date;
-  members: Map<string, User>;
-  messages: Message[];
+  createdAt: string;
+  memberCount?: number;
+  members?: UserInfo[];
 }
 
 export interface User {
   id: string;
   nickname: string;
-  joinedAt: Date;
+  joinedAt: string;
+}
+
+export interface UserInfo {
+  id: string;
+  nickname: string;
 }
 
 export interface Message {
@@ -23,7 +28,7 @@ export interface Message {
   userId: string;
   nickname: string;
   content: string;
-  timestamp: Date;
+  timestamp: string;
 }
 
 // WebSocket message types
@@ -32,7 +37,8 @@ export type ClientMessageType =
   | 'join_room'
   | 'leave_room'
   | 'send_message'
-  | 'get_rooms';
+  | 'get_rooms'
+  | 'reconnect';
 
 export type ServerMessageType =
   | 'room_created'
@@ -43,16 +49,17 @@ export type ServerMessageType =
   | 'user_left'
   | 'room_list'
   | 'error'
-  | 'room_history';
+  | 'room_history'
+  | 'reconnected';
 
 export interface ClientMessage {
   type: ClientMessageType;
-  payload: any;
+  payload: unknown;
 }
 
 export interface ServerMessage {
   type: ServerMessageType;
-  payload: any;
+  payload: unknown;
 }
 
 // Payloads
@@ -60,11 +67,13 @@ export interface CreateRoomPayload {
   name: string;
   type: RoomType;
   nickname: string;
+  userId?: string;
 }
 
 export interface JoinRoomPayload {
   inviteCode: string;
   nickname: string;
+  userId?: string;
 }
 
 export interface SendMessagePayload {
@@ -74,4 +83,9 @@ export interface SendMessagePayload {
 
 export interface LeaveRoomPayload {
   roomId: string;
+}
+
+export interface ReconnectPayload {
+  userId: string;
+  nickname: string;
 }

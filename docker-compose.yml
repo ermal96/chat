@@ -10,6 +10,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4545
+      - DB_PATH=/app/data/chat.db
+    volumes:
+      - chat-data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4545/health"]
@@ -17,3 +20,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+volumes:
+  chat-data:

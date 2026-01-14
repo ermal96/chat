@@ -1,5 +1,7 @@
 node_modules/
 dist/
-public/js/
+data/
 *.log
 .DS_Store
+.env
+.env.*
