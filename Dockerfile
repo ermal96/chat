@@ -27,8 +27,8 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install runtime dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
+# Install runtime dependencies for better-sqlite3 and su-exec for user switching
+RUN apk add --no-cache python3 make g++ su-exec
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
@@ -46,14 +46,15 @@ RUN apk del python3 make g++
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create data directory for SQLite
 RUN mkdir -p /app/data && chown -R nodejs:nodejs /app/data
 
 # Set ownership
 RUN chown -R nodejs:nodejs /app
-
-# Switch to non-root user
-USER nodejs
 
 # Expose port
 EXPOSE 4545
@@ -70,5 +71,8 @@ VOLUME ["/app/data"]
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:4545/health || exit 1
 
-# Start the application
+# Use entrypoint to handle volume permissions
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+# Start the application (runs as nodejs user via entrypoint)
 CMD ["node", "dist/server/index.js"]
