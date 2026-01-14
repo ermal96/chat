@@ -12,7 +12,11 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
+console.log(`Database path: ${dbPath}`);
+console.log(`Database directory exists: ${fs.existsSync(dataDir)}`);
+
 const db = new Database(dbPath);
+console.log(`Database opened successfully`);
 
 // Initialize database schema
 db.exec(`
@@ -254,18 +258,31 @@ export const database = {
 
     const passwordHash = await bcrypt.hash(password, 10);
     try {
-      stmts.registerUser.run(id, nickname, email.toLowerCase(), passwordHash);
+      console.log(`Registering user: ${nickname} with email: ${email.toLowerCase()}`);
+      const result = stmts.registerUser.run(id, nickname, email.toLowerCase(), passwordHash);
+      console.log(`Insert result: changes=${result.changes}, lastInsertRowid=${result.lastInsertRowid}`);
+
+      // Verify the user was actually inserted
+      const verify = stmts.getUserByEmail.get(email.toLowerCase());
+      console.log(`Verification after insert: ${verify ? 'User found' : 'User NOT found!'}`);
+
       return {
         success: true,
         user: { id, nickname, joinedAt: new Date().toISOString(), email: email.toLowerCase() }
       };
     } catch (err) {
+      console.error('Registration error:', err);
       return { success: false, error: 'Registration failed' };
     }
   },
 
   async loginUser(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
     console.log(`Login attempt for: ${email.toLowerCase()}`);
+
+    // Debug: list all users in database
+    const allUsers = db.prepare('SELECT id, nickname, email FROM users').all();
+    console.log(`All users in database: ${JSON.stringify(allUsers)}`);
+
     const row = stmts.getUserByEmail.get(email.toLowerCase()) as { id: string; nickname: string; created_at: string; email: string; password_hash: string } | undefined;
     if (!row) {
       console.log(`User not found: ${email.toLowerCase()}`);
@@ -437,5 +454,11 @@ export const database = {
   // Check if invite code exists
   inviteCodeExists(code: string): boolean {
     return !!stmts.getRoomByInviteCode.get(code.toUpperCase());
+  },
+
+  // Debug: list all users
+  listAllUsers(): { id: string; nickname: string; email: string | null }[] {
+    const rows = db.prepare('SELECT id, nickname, email FROM users').all() as { id: string; nickname: string; email: string | null }[];
+    return rows;
   }
 };
