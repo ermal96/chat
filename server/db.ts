@@ -123,7 +123,7 @@ const stmts = {
   `),
   getMessage: db.prepare('SELECT * FROM messages WHERE id = ?'),
   editMessage: db.prepare('UPDATE messages SET content = ?, edited = 1, edited_at = ? WHERE id = ? AND user_id = ? AND deleted = 0'),
-  deleteMessage: db.prepare('UPDATE messages SET deleted = 1, content = "[Message deleted]" WHERE id = ? AND user_id = ?'),
+  deleteMessage: db.prepare("UPDATE messages SET deleted = 1, content = '[Message deleted]' WHERE id = ? AND user_id = ?"),
   getRoomMessages: db.prepare(`
     SELECT * FROM messages
     WHERE room_id = ? AND deleted = 0
