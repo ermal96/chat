@@ -130,8 +130,8 @@ export function WelcomeScreen({
   return (
     <div className="welcome-screen">
       <div className="welcome-container">
-        <h1>Invite Chat</h1>
-        <p>Secure messaging with your friends</p>
+        <h1>Cunat Teams</h1>
+        <p>Connect and collaborate with your team</p>
 
         <div className="auth-buttons">
           <button className="btn primary large" onClick={() => setMode('login')}>

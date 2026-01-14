@@ -68,6 +68,7 @@ export type ClientMessageType =
   | 'typing_start'
   | 'typing_stop'
   | 'get_rooms'
+  | 'get_room_history'
   | 'reconnect'
   | 'mark_read';
 
@@ -161,6 +162,10 @@ export interface ReconnectPayload {
 }
 
 export interface MarkReadPayload {
+  roomId: string;
+}
+
+export interface GetRoomHistoryPayload {
   roomId: string;
 }
 

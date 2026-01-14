@@ -27,7 +27,7 @@ export function Sidebar({
   return (
     <aside className={`sidebar ${showMobile ? 'show-mobile' : ''}`}>
       <div className="sidebar-header">
-        <h2>Chats</h2>
+        <h2>Cunat Teams</h2>
         <button className="btn-icon add-room" onClick={onNewRoom} title="New Room">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
@@ -43,12 +43,12 @@ export function Sidebar({
             onClick={() => onSelectRoom(room)}
           >
             <div className="room-avatar" style={{ backgroundColor: getAvatarColor(room.id) }}>
-              {room.type === 'group' ? '👥' : '💬'}
+              {getInitials(room.name)}
             </div>
             <div className="room-content">
               <div className="room-name">{room.name}</div>
               <div className="room-meta">
-                {room.type === 'group' ? 'Group' : 'Direct'} · {room.memberCount} member{room.memberCount !== 1 ? 's' : ''}
+                {room.memberCount || 1} member{(room.memberCount || 1) !== 1 ? 's' : ''}
               </div>
             </div>
             {room.unreadCount && room.unreadCount > 0 && (

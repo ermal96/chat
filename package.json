@@ -1,7 +1,7 @@
 {
-  "name": "invite-chat",
+  "name": "cunat-chat",
   "version": "2.0.0",
-  "description": "A chat app where friends can discuss in groups or directly via invite codes",
+  "description": "Cunat Chat - Secure messaging with your friends",
   "main": "dist/server/index.js",
   "scripts": {
     "dev:server": "tsc -w",

@@ -269,15 +269,11 @@ export default function App() {
         const payload = msg.payload as { user: { id: string; nickname: string }; rooms: Room[] };
         currentUserIdRef.current = payload.user.id;
         setIsReconnecting(false);
-        // Don't call setUser here to avoid triggering reconnect loop
-        // The user data is already in localStorage
         const roomMap = new Map<string, Room>();
         payload.rooms.forEach(r => roomMap.set(r.id, r));
         setRooms(roomMap);
         if (payload.rooms.length > 0) {
           setCurrentRoom(payload.rooms[0]);
-        }
-        if (payload.rooms.length > 0) {
           showToast(`Welcome back, ${payload.user.nickname}!`, 'success');
         }
         break;
@@ -315,6 +311,13 @@ export default function App() {
       hasReconnectedRef.current = false;
     }
   }, [connected, user, send]);
+
+  // Fetch room history when currentRoom changes
+  useEffect(() => {
+    if (connected && currentRoom && !messages.has(currentRoom.id)) {
+      send('get_room_history', { roomId: currentRoom.id });
+    }
+  }, [connected, currentRoom, send, messages]);
 
   const handleRegister = (email: string, password: string, nickname: string) => {
     send('register', { email, password, nickname });
@@ -402,9 +405,8 @@ export default function App() {
   const handleSelectRoom = (room: Room) => {
     setCurrentRoom(room);
     setReplyingTo(null);
-    if (!messages.has(room.id)) {
-      send('get_rooms', {});
-    }
+    // Always fetch room history when selecting a room
+    send('get_room_history', { roomId: room.id });
   };
 
   const handleLogout = () => {

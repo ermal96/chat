@@ -115,12 +115,12 @@ export function ChatScreen({
 
                 <div className="room-info">
                   <div className="room-avatar" style={{ backgroundColor: getAvatarColor(currentRoom.id) }}>
-                    {currentRoom.type === 'group' ? '👥' : '💬'}
+                    {getInitials(currentRoom.name)}
                   </div>
                   <div className="room-details">
                     <h3>{currentRoom.name}</h3>
                     <span className="member-count">
-                      {currentRoom.memberCount} member{currentRoom.memberCount !== 1 ? 's' : ''}
+                      {currentRoom.memberCount || 1} member{(currentRoom.memberCount || 1) !== 1 ? 's' : ''}
                       {currentRoom.onlineMembers && currentRoom.onlineMembers.length > 0 && (
                         <span className="online-count"> · {currentRoom.onlineMembers.length} online</span>
                       )}

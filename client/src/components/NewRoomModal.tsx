@@ -10,12 +10,11 @@ interface NewRoomModalProps {
 export function NewRoomModal({ nickname, onCreateRoom, onJoinRoom, onClose }: NewRoomModalProps) {
   const [activeTab, setActiveTab] = useState<'create' | 'join'>('create');
   const [roomName, setRoomName] = useState('');
-  const [roomType, setRoomType] = useState<'group' | 'direct'>('group');
   const [inviteCode, setInviteCode] = useState('');
 
   const handleCreate = () => {
     if (!roomName.trim()) return;
-    onCreateRoom(nickname, roomName.trim(), roomType);
+    onCreateRoom(nickname, roomName.trim(), 'group');
     onClose();
   };
 
@@ -26,54 +25,70 @@ export function NewRoomModal({ nickname, onCreateRoom, onJoinRoom, onClose }: Ne
   };
 
   return (
-    <div className="modal" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-content">
-        <h3>Create or Join Room</h3>
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h3>New Room</h3>
+        <p className="subtitle">Create a new room or join an existing one</p>
 
-        <div className="modal-tabs">
+        <div className="tabs">
           <button
             className={`tab ${activeTab === 'create' ? 'active' : ''}`}
             onClick={() => setActiveTab('create')}
           >
-            Create
+            Create Room
           </button>
           <button
             className={`tab ${activeTab === 'join' ? 'active' : ''}`}
             onClick={() => setActiveTab('join')}
           >
-            Join
+            Join Room
           </button>
         </div>
 
         {activeTab === 'create' ? (
           <div className="tab-content">
-            <input
-              type="text"
-              placeholder="Room name"
-              value={roomName}
-              onChange={e => setRoomName(e.target.value)}
-              maxLength={30}
-            />
-            <select value={roomType} onChange={e => setRoomType(e.target.value as 'group' | 'direct')}>
-              <option value="group">Group Chat</option>
-              <option value="direct">Direct Message</option>
-            </select>
-            <button className="btn primary" onClick={handleCreate}>Create</button>
+            <div className="input-group">
+              <label>Room Name</label>
+              <input
+                type="text"
+                placeholder="Enter room name"
+                value={roomName}
+                onChange={e => setRoomName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                maxLength={30}
+                autoFocus
+              />
+            </div>
+            <div className="btn-group">
+              <button className="btn ghost" onClick={onClose}>Cancel</button>
+              <button className="btn primary" onClick={handleCreate} disabled={!roomName.trim()}>
+                Create Room
+              </button>
+            </div>
           </div>
         ) : (
           <div className="tab-content">
-            <input
-              type="text"
-              placeholder="Enter invite code"
-              value={inviteCode}
-              onChange={e => setInviteCode(e.target.value.toUpperCase())}
-              maxLength={6}
-            />
-            <button className="btn secondary" onClick={handleJoin}>Join</button>
+            <div className="input-group">
+              <label>Invite Code</label>
+              <input
+                type="text"
+                placeholder="Enter 6-character code"
+                value={inviteCode}
+                onChange={e => setInviteCode(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && handleJoin()}
+                maxLength={6}
+                autoFocus
+                style={{ textTransform: 'uppercase', letterSpacing: '4px', fontWeight: 600 }}
+              />
+            </div>
+            <div className="btn-group">
+              <button className="btn ghost" onClick={onClose}>Cancel</button>
+              <button className="btn secondary" onClick={handleJoin} disabled={!inviteCode.trim()}>
+                Join Room
+              </button>
+            </div>
           </div>
         )}
-
-        <button className="btn cancel" onClick={onClose}>Cancel</button>
       </div>
     </div>
   );

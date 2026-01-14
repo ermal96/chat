@@ -18,6 +18,7 @@ import {
   ReconnectPayload,
   RegisterPayload,
   LoginPayload,
+  GetRoomHistoryPayload,
   User,
   Room,
   UserInfo,
@@ -241,6 +242,9 @@ async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<voi
       break;
     case 'get_rooms':
       await handleGetRooms(ws, client);
+      break;
+    case 'get_room_history':
+      await handleGetRoomHistory(ws, client, message.payload as GetRoomHistoryPayload);
       break;
     case 'reconnect':
       await handleReconnect(ws, client, message.payload as ReconnectPayload);
@@ -648,6 +652,26 @@ async function handleGetRooms(ws: WebSocket, client: ConnectedClient): Promise<v
   const rooms = await database.getUserRooms(client.user.id);
   const serializedRooms = await Promise.all(rooms.map(serializeRoom));
   send(ws, { type: 'room_list', payload: { rooms: serializedRooms } });
+}
+
+async function handleGetRoomHistory(ws: WebSocket, client: ConnectedClient, payload: GetRoomHistoryPayload): Promise<void> {
+  const { roomId } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!client.rooms.has(roomId)) {
+    send(ws, { type: 'error', payload: { message: 'Not in this room' } });
+    return;
+  }
+
+  const messages = await database.getRoomMessages(roomId);
+  send(ws, {
+    type: 'room_history',
+    payload: { roomId, messages }
+  });
 }
 
 async function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: ReconnectPayload): Promise<void> {
