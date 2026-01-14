@@ -649,11 +649,11 @@ async function handleAddReaction(ws: WebSocket, client: ConnectedClient, payload
     return;
   }
 
-  await database.addReaction(messageId, client.user.id, emoji);
+  await database.addReaction(messageId, client.user.id, client.user.nickname, emoji);
 
   broadcastToRoom(roomId, {
     type: 'reaction_added',
-    payload: { messageId, roomId, userId: client.user.id, emoji }
+    payload: { messageId, roomId, userId: client.user.id, nickname: client.user.nickname, emoji }
   });
 }
 

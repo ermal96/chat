@@ -103,14 +103,14 @@ function toMessageType(doc: any): MessageType {
   return message;
 }
 
-function aggregateReactions(reactions: { emoji: string; userId: string }[]): Reaction[] {
-  const reactionMap = new Map<string, string[]>();
+function aggregateReactions(reactions: { emoji: string; userId: string; nickname: string }[]): Reaction[] {
+  const reactionMap = new Map<string, { id: string; nickname: string }[]>();
 
   reactions.forEach(r => {
     if (!reactionMap.has(r.emoji)) {
       reactionMap.set(r.emoji, []);
     }
-    reactionMap.get(r.emoji)!.push(r.userId);
+    reactionMap.get(r.emoji)!.push({ id: r.userId, nickname: r.nickname || 'Unknown' });
   });
 
   return Array.from(reactionMap.entries()).map(([emoji, users]) => ({ emoji, users }));
@@ -412,10 +412,10 @@ export const database = {
   },
 
   // Reaction operations
-  async addReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+  async addReaction(messageId: string, userId: string, nickname: string, emoji: string): Promise<void> {
     await Message.updateOne(
       { _id: messageId },
-      { $addToSet: { reactions: { emoji, userId, createdAt: new Date() } } }
+      { $addToSet: { reactions: { emoji, userId, nickname, createdAt: new Date() } } }
     );
   },
 

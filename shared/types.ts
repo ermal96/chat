@@ -57,9 +57,14 @@ export interface UserInfo {
   avatar?: string;
 }
 
+export interface ReactionUser {
+  id: string;
+  nickname: string;
+}
+
 export interface Reaction {
   emoji: string;
-  users: string[]; // User IDs who reacted
+  users: ReactionUser[]; // Users who reacted with id and nickname
 }
 
 export interface Message {

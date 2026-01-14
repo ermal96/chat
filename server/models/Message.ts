@@ -3,6 +3,7 @@ import mongoose, { Schema } from 'mongoose';
 export interface IReaction {
   emoji: string;
   userId: string;
+  nickname: string;
   createdAt: Date;
 }
 
@@ -31,6 +32,7 @@ export interface IMessage {
 const ReactionSchema = new Schema<IReaction>({
   emoji: { type: String, required: true },
   userId: { type: String, required: true },
+  nickname: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 }, { _id: false });
 

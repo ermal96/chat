@@ -229,12 +229,14 @@ export function MessageList({
               {msg.reactions && msg.reactions.length > 0 && (
                 <div className="reactions">
                   {msg.reactions.map((reaction) => {
-                    const hasReacted = reaction.users.includes(currentUserId);
+                    const hasReacted = reaction.users.some(u => u.id === currentUserId);
+                    const userNames = reaction.users.map(u => u.nickname).join(', ');
                     return (
                       <button
                         key={reaction.emoji}
                         className={`reaction ${hasReacted ? 'active' : ''}`}
                         onClick={() => handleReactionClick(msg.id, reaction.emoji, hasReacted)}
+                        title={userNames}
                       >
                         <span className="reaction-emoji">{reaction.emoji}</span>
                         <span className="reaction-count">{reaction.users.length}</span>

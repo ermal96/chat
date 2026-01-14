@@ -178,7 +178,7 @@ export default function App() {
 
       case 'reaction_added':
       case 'reaction_removed': {
-        const payload = msg.payload as { roomId: string; messageId: string; emoji: string; userId: string };
+        const payload = msg.payload as { roomId: string; messageId: string; emoji: string; userId: string; nickname?: string };
         setMessages(prev => {
           const roomMsgs = prev.get(payload.roomId) || [];
           const updated = roomMsgs.map(m => {
@@ -186,18 +186,19 @@ export default function App() {
 
             const reactions = [...(m.reactions || [])];
             const existingReaction = reactions.find(r => r.emoji === payload.emoji);
+            const reactionUser = { id: payload.userId, nickname: payload.nickname || 'Unknown' };
 
             if (msg.type === 'reaction_added') {
               if (existingReaction) {
-                if (!existingReaction.users.includes(payload.userId)) {
-                  existingReaction.users.push(payload.userId);
+                if (!existingReaction.users.some(u => u.id === payload.userId)) {
+                  existingReaction.users.push(reactionUser);
                 }
               } else {
-                reactions.push({ emoji: payload.emoji, users: [payload.userId] });
+                reactions.push({ emoji: payload.emoji, users: [reactionUser] });
               }
             } else {
               if (existingReaction) {
-                existingReaction.users = existingReaction.users.filter(u => u !== payload.userId);
+                existingReaction.users = existingReaction.users.filter(u => u.id !== payload.userId);
                 if (existingReaction.users.length === 0) {
                   const idx = reactions.indexOf(existingReaction);
                   reactions.splice(idx, 1);
