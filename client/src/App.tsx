@@ -57,6 +57,7 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser[]>>(new Map());
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   // Track if we've already sent reconnect for this connection
   const hasReconnectedRef = useRef(false);
@@ -267,6 +268,7 @@ export default function App() {
       case 'reconnected': {
         const payload = msg.payload as { user: { id: string; nickname: string }; rooms: Room[] };
         currentUserIdRef.current = payload.user.id;
+        setIsReconnecting(false);
         // Don't call setUser here to avoid triggering reconnect loop
         // The user data is already in localStorage
         const roomMap = new Map<string, Room>();
@@ -275,7 +277,9 @@ export default function App() {
         if (payload.rooms.length > 0) {
           setCurrentRoom(payload.rooms[0]);
         }
-        showToast(`Welcome back, ${payload.user.nickname}!`, 'success');
+        if (payload.rooms.length > 0) {
+          showToast(`Welcome back, ${payload.user.nickname}!`, 'success');
+        }
         break;
       }
 
@@ -302,6 +306,7 @@ export default function App() {
     if (connected && user && !hasReconnectedRef.current) {
       hasReconnectedRef.current = true;
       currentUserIdRef.current = user.id;
+      setIsReconnecting(true);
       send('reconnect', { userId: user.id, nickname: user.nickname });
     }
 
@@ -417,6 +422,18 @@ export default function App() {
 
   // User is logged in if they have an email (registered) or have rooms (guest with active session)
   const isLoggedIn = user && (user.email || rooms.size > 0);
+
+  // Show loading while reconnecting
+  if (isReconnecting) {
+    return (
+      <div className="app">
+        <div className="loading-screen">
+          <div className="loading-spinner"></div>
+          <p>Reconnecting...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
