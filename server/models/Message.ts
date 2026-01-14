@@ -42,7 +42,7 @@ const ReplyToSchema = new Schema<IReplyTo>({
 
 const MessageSchema = new Schema<IMessage>({
   _id: { type: String, required: true },
-  roomId: { type: String, required: true, index: true },
+  roomId: { type: String, required: true },
   userId: { type: String, required: true },
   nickname: { type: String, required: true },
   content: { type: String, required: true },
@@ -52,7 +52,7 @@ const MessageSchema = new Schema<IMessage>({
   deleted: { type: Boolean, default: false },
   replyTo: { type: ReplyToSchema },
   reactions: [ReactionSchema],
-  expiresAt: { type: Date, index: true },
+  expiresAt: { type: Date },
   createdAt: { type: Date, default: Date.now }
 });
 

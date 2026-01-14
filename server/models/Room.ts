@@ -30,8 +30,7 @@ const RoomSchema = new Schema<IRoom>({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Index for invite code lookups
-RoomSchema.index({ inviteCode: 1 });
+// Note: inviteCode index is already created by unique: true option
 RoomSchema.index({ 'members.userId': 1 });
 
 export const Room = mongoose.model<IRoom>('Room', RoomSchema);

@@ -1,19 +1,37 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { User, Room, Message, Team } from './models';
 import { Room as RoomType, User as UserType, Message as MessageType, RoomType as RoomTypeEnum, Reaction, Team as TeamType, Channel as ChannelType, TeamMember } from '../shared/types';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chat';
+let mongoServer: MongoMemoryServer | null = null;
 
 // Connect to MongoDB
 export async function connectDB(): Promise<void> {
   try {
-    await mongoose.connect(MONGODB_URI);
+    let uri = process.env.MONGODB_URI;
+
+    if (!uri) {
+      // Use in-memory MongoDB for development
+      console.log('No MONGODB_URI set, starting in-memory MongoDB...');
+      mongoServer = await MongoMemoryServer.create();
+      uri = mongoServer.getUri();
+      console.log('In-memory MongoDB started');
+    }
+
+    await mongoose.connect(uri);
     console.log('Connected to MongoDB');
-    console.log(`Database URI: ${MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`);
+    console.log(`Database URI: ${uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`);
   } catch (error) {
     console.error('MongoDB connection error:', error);
     process.exit(1);
+  }
+}
+
+export async function disconnectDB(): Promise<void> {
+  await mongoose.disconnect();
+  if (mongoServer) {
+    await mongoServer.stop();
   }
 }
 

@@ -46,8 +46,7 @@ const TeamSchema = new Schema<ITeam>({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Indexes
-TeamSchema.index({ inviteCode: 1 });
+// Note: inviteCode index is already created by unique: true option
 TeamSchema.index({ 'members.userId': 1 });
 
 export const Team = mongoose.model<ITeam>('Team', TeamSchema);

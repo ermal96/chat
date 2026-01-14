@@ -16,7 +16,6 @@ const UserSchema = new Schema<IUser>({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Index for email lookups
-UserSchema.index({ email: 1 });
+// Note: email index is already created by unique: true option
 
 export const User = mongoose.model<IUser>('User', UserSchema);
