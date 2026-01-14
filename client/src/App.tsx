@@ -56,11 +56,11 @@ function playNotificationSound() {
 
 // Show browser notification (sound is handled separately)
 function showNotification(title: string, body: string) {
-  if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+  if ('Notification' in window && Notification.permission === 'granted') {
     const notification = new Notification(title, {
       body,
       icon: '/favicon.ico',
-      tag: 'chat-message',
+      tag: `chat-message-${Date.now()}`, // Unique tag to allow multiple notifications
     });
 
     notification.onclick = () => {
@@ -68,8 +68,8 @@ function showNotification(title: string, body: string) {
       notification.close();
     };
 
-    // Auto close after 5 seconds
-    setTimeout(() => notification.close(), 5000);
+    // Auto close after 4 seconds
+    setTimeout(() => notification.close(), 4000);
   }
 }
 
