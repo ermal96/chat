@@ -19,8 +19,15 @@ import {
   RegisterPayload,
   LoginPayload,
   GetRoomHistoryPayload,
+  CreateTeamPayload,
+  JoinTeamPayload,
+  LeaveTeamPayload,
+  CreateChannelPayload,
+  DeleteChannelPayload,
+  GetChannelHistoryPayload,
   User,
   Room,
+  Team,
   UserInfo,
   getAvatarColor
 } from '../shared/types';
@@ -47,6 +54,8 @@ interface ConnectedClient {
   ws: WebSocket;
   user: User | null;
   rooms: Set<string>;
+  teams: Set<string>; // Team IDs user is in
+  channels: Set<string>; // Channel IDs (teamId-channelName format)
   typingIn: Set<string>; // Room IDs where user is typing
 }
 
@@ -143,6 +152,8 @@ wss.on('connection', (ws: WebSocket) => {
     ws,
     user: null,
     rooms: new Set(),
+    teams: new Set(),
+    channels: new Set(),
     typingIn: new Set()
   };
   clients.set(ws, client);
@@ -249,6 +260,25 @@ async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<voi
     case 'reconnect':
       await handleReconnect(ws, client, message.payload as ReconnectPayload);
       break;
+    // Team operations
+    case 'create_team':
+      await handleCreateTeam(ws, client, message.payload as CreateTeamPayload);
+      break;
+    case 'join_team':
+      await handleJoinTeam(ws, client, message.payload as JoinTeamPayload);
+      break;
+    case 'leave_team':
+      await handleLeaveTeam(ws, client, message.payload as LeaveTeamPayload);
+      break;
+    case 'create_channel':
+      await handleCreateChannel(ws, client, message.payload as CreateChannelPayload);
+      break;
+    case 'delete_channel':
+      await handleDeleteChannel(ws, client, message.payload as DeleteChannelPayload);
+      break;
+    case 'get_channel_history':
+      await handleGetChannelHistory(ws, client, message.payload as GetChannelHistoryPayload);
+      break;
   }
 }
 
@@ -325,15 +355,23 @@ async function handleLogin(ws: WebSocket, client: ConnectedClient, payload: Logi
   // Serialize rooms with member info
   const serializedRooms = await Promise.all(rooms.map(serializeRoom));
 
+  // Get user's teams from database
+  const teams = await database.getUserTeams(result.user!.id);
+  teams.forEach(team => {
+    client.teams.add(team.id);
+    team.channels.forEach(ch => client.channels.add(ch.id));
+  });
+
   send(ws, {
     type: 'logged_in',
     payload: {
       user: { id: client.user.id, nickname: client.user.nickname, email: client.user.email, avatar: getAvatarColor(client.user.id) },
-      rooms: serializedRooms
+      rooms: serializedRooms,
+      teams
     }
   });
 
-  console.log(`User logged in: ${result.user!.nickname} (${email}) with ${rooms.length} rooms`);
+  console.log(`User logged in: ${result.user!.nickname} (${email}) with ${rooms.length} rooms and ${teams.length} teams`);
 }
 
 async function handleCreateRoom(ws: WebSocket, client: ConnectedClient, payload: CreateRoomPayload): Promise<void> {
@@ -707,15 +745,259 @@ async function handleReconnect(ws: WebSocket, client: ConnectedClient, payload: 
 
   const serializedRooms = await Promise.all(rooms.map(serializeRoom));
 
+  // Get user's teams from database
+  const teams = await database.getUserTeams(userId);
+  teams.forEach(team => {
+    client.teams.add(team.id);
+    team.channels.forEach(ch => client.channels.add(ch.id));
+  });
+
   send(ws, {
     type: 'reconnected',
     payload: {
       user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(userId) },
-      rooms: serializedRooms
+      rooms: serializedRooms,
+      teams
     }
   });
 
-  console.log(`${nickname} reconnected with ${rooms.length} rooms`);
+  console.log(`${nickname} reconnected with ${rooms.length} rooms and ${teams.length} teams`);
+}
+
+// Helper to broadcast to team members
+function broadcastToTeam(teamId: string, message: ServerMessage, excludeWs?: WebSocket): void {
+  clients.forEach((client, ws) => {
+    if (ws !== excludeWs && client.teams.has(teamId)) {
+      send(ws, message);
+    }
+  });
+}
+
+// Team handlers
+async function handleCreateTeam(ws: WebSocket, client: ConnectedClient, payload: CreateTeamPayload): Promise<void> {
+  const { name, description } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!name || name.trim().length === 0) {
+    send(ws, { type: 'error', payload: { message: 'Team name is required' } });
+    return;
+  }
+
+  // Generate unique invite code for team
+  let inviteCode = generateInviteCode();
+  while (await database.teamInviteCodeExists(inviteCode)) {
+    inviteCode = generateInviteCode();
+  }
+
+  const teamId = generateId();
+  const team = await database.createTeam(teamId, name.trim(), description?.trim(), inviteCode, client.user.id);
+
+  client.teams.add(team.id);
+  // Add default General channel
+  team.channels.forEach(ch => client.channels.add(ch.id));
+
+  send(ws, {
+    type: 'team_created',
+    payload: { team }
+  });
+
+  console.log(`Team created: ${team.name} (${team.inviteCode}) by ${client.user.nickname}`);
+}
+
+async function handleJoinTeam(ws: WebSocket, client: ConnectedClient, payload: JoinTeamPayload): Promise<void> {
+  const { inviteCode } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!inviteCode) {
+    send(ws, { type: 'error', payload: { message: 'Invite code is required' } });
+    return;
+  }
+
+  const team = await database.getTeamByInviteCode(inviteCode);
+  if (!team) {
+    send(ws, { type: 'error', payload: { message: 'Invalid invite code' } });
+    return;
+  }
+
+  // Check if already in team
+  if (client.teams.has(team.id)) {
+    send(ws, { type: 'error', payload: { message: 'Already in this team' } });
+    return;
+  }
+
+  await database.addMemberToTeam(team.id, client.user.id);
+  client.teams.add(team.id);
+  team.channels.forEach(ch => client.channels.add(ch.id));
+
+  // Refresh team data with updated member list
+  const updatedTeam = await database.getTeamById(team.id);
+
+  send(ws, {
+    type: 'team_joined',
+    payload: { team: updatedTeam }
+  });
+
+  // Notify other team members
+  broadcastToTeam(team.id, {
+    type: 'user_joined',
+    payload: {
+      teamId: team.id,
+      user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(client.user.id) }
+    }
+  }, ws);
+
+  console.log(`${client.user.nickname} joined team: ${team.name}`);
+}
+
+async function handleLeaveTeam(ws: WebSocket, client: ConnectedClient, payload: LeaveTeamPayload): Promise<void> {
+  const { teamId } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!client.teams.has(teamId)) {
+    send(ws, { type: 'error', payload: { message: 'Not in this team' } });
+    return;
+  }
+
+  // Get team to remove channels from client
+  const team = await database.getTeamById(teamId);
+  if (team) {
+    team.channels.forEach(ch => client.channels.delete(ch.id));
+  }
+
+  await database.removeMemberFromTeam(teamId, client.user.id);
+  client.teams.delete(teamId);
+
+  send(ws, {
+    type: 'team_left',
+    payload: { teamId }
+  });
+
+  // Notify other team members
+  broadcastToTeam(teamId, {
+    type: 'user_left',
+    payload: {
+      teamId,
+      user: { id: client.user.id, nickname: client.user.nickname, avatar: getAvatarColor(client.user.id) }
+    }
+  });
+
+  console.log(`${client.user.nickname} left team: ${teamId}`);
+}
+
+async function handleCreateChannel(ws: WebSocket, client: ConnectedClient, payload: CreateChannelPayload): Promise<void> {
+  const { teamId, name, description } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!client.teams.has(teamId)) {
+    send(ws, { type: 'error', payload: { message: 'Not in this team' } });
+    return;
+  }
+
+  if (!name || name.trim().length === 0) {
+    send(ws, { type: 'error', payload: { message: 'Channel name is required' } });
+    return;
+  }
+
+  const channelId = `${teamId}-${generateId()}`;
+  const channel = await database.createChannel(teamId, channelId, name.trim(), description?.trim());
+
+  if (!channel) {
+    send(ws, { type: 'error', payload: { message: 'Failed to create channel' } });
+    return;
+  }
+
+  // Add channel to all team members
+  clients.forEach((c) => {
+    if (c.teams.has(teamId)) {
+      c.channels.add(channel.id);
+    }
+  });
+
+  // Broadcast to team
+  broadcastToTeam(teamId, {
+    type: 'channel_created',
+    payload: { teamId, channel }
+  });
+
+  console.log(`Channel created: ${channel.name} in team ${teamId}`);
+}
+
+async function handleDeleteChannel(ws: WebSocket, client: ConnectedClient, payload: DeleteChannelPayload): Promise<void> {
+  const { teamId, channelId } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!client.teams.has(teamId)) {
+    send(ws, { type: 'error', payload: { message: 'Not in this team' } });
+    return;
+  }
+
+  // Check if user is team owner
+  const isOwner = await database.isUserTeamOwner(teamId, client.user.id);
+  if (!isOwner) {
+    send(ws, { type: 'error', payload: { message: 'Only team owner can delete channels' } });
+    return;
+  }
+
+  const deleted = await database.deleteChannel(teamId, channelId);
+  if (!deleted) {
+    send(ws, { type: 'error', payload: { message: 'Failed to delete channel' } });
+    return;
+  }
+
+  // Remove channel from all team members
+  clients.forEach((c) => {
+    if (c.teams.has(teamId)) {
+      c.channels.delete(channelId);
+    }
+  });
+
+  // Broadcast to team
+  broadcastToTeam(teamId, {
+    type: 'channel_deleted',
+    payload: { teamId, channelId }
+  });
+
+  console.log(`Channel deleted: ${channelId} from team ${teamId}`);
+}
+
+async function handleGetChannelHistory(ws: WebSocket, client: ConnectedClient, payload: GetChannelHistoryPayload): Promise<void> {
+  const { channelId } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!client.channels.has(channelId)) {
+    send(ws, { type: 'error', payload: { message: 'Not in this channel' } });
+    return;
+  }
+
+  const messages = await database.getChannelMessages(channelId);
+  send(ws, {
+    type: 'channel_history',
+    payload: { channelId, messages }
+  });
 }
 
 const PORT = process.env.PORT || 4545;

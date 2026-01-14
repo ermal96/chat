@@ -4,7 +4,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ChatScreen } from './components/ChatScreen';
 import { Toast } from './components/Toast';
-import type { Room, Message, ServerMessage } from '../../shared/types';
+import type { Room, Message, ServerMessage, Team, Channel } from '../../shared/types';
 
 interface UserData {
   id: string;
@@ -59,6 +59,11 @@ export default function App() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
+  // Teams state
+  const [teams, setTeams] = useState<Map<string, Team>>(new Map());
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+  const [currentChannel, setCurrentChannel] = useState<Channel | null>(null);
+
   // Track if we've already sent reconnect for this connection
   const hasReconnectedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
@@ -87,12 +92,25 @@ export default function App() {
       }
 
       case 'logged_in': {
-        const payload = msg.payload as { user: { id: string; nickname: string; email: string }; rooms: Room[] };
+        const payload = msg.payload as { user: { id: string; nickname: string; email: string }; rooms: Room[]; teams?: Team[] };
         setUser({ id: payload.user.id, nickname: payload.user.nickname, email: payload.user.email });
         currentUserIdRef.current = payload.user.id;
         const roomMap = new Map<string, Room>();
         payload.rooms.forEach(r => roomMap.set(r.id, r));
         setRooms(roomMap);
+        // Load teams
+        if (payload.teams) {
+          const teamMap = new Map<string, Team>();
+          payload.teams.forEach(t => teamMap.set(t.id, t));
+          setTeams(teamMap);
+          // Select first team and channel if available
+          if (payload.teams.length > 0) {
+            setCurrentTeam(payload.teams[0]);
+            if (payload.teams[0].channels.length > 0) {
+              setCurrentChannel(payload.teams[0].channels[0]);
+            }
+          }
+        }
         if (payload.rooms.length > 0) {
           setCurrentRoom(payload.rooms[0]);
         }
@@ -266,16 +284,97 @@ export default function App() {
       }
 
       case 'reconnected': {
-        const payload = msg.payload as { user: { id: string; nickname: string }; rooms: Room[] };
+        const payload = msg.payload as { user: { id: string; nickname: string }; rooms: Room[]; teams?: Team[] };
         currentUserIdRef.current = payload.user.id;
         setIsReconnecting(false);
         const roomMap = new Map<string, Room>();
         payload.rooms.forEach(r => roomMap.set(r.id, r));
         setRooms(roomMap);
+        // Load teams
+        if (payload.teams) {
+          const teamMap = new Map<string, Team>();
+          payload.teams.forEach(t => teamMap.set(t.id, t));
+          setTeams(teamMap);
+          if (payload.teams.length > 0 && !currentTeam) {
+            setCurrentTeam(payload.teams[0]);
+            if (payload.teams[0].channels.length > 0) {
+              setCurrentChannel(payload.teams[0].channels[0]);
+            }
+          }
+        }
         if (payload.rooms.length > 0) {
           setCurrentRoom(payload.rooms[0]);
-          showToast(`Welcome back, ${payload.user.nickname}!`, 'success');
         }
+        showToast(`Welcome back, ${payload.user.nickname}!`, 'success');
+        break;
+      }
+
+      // Team events
+      case 'team_created': {
+        const payload = msg.payload as { team: Team };
+        setTeams(prev => new Map(prev).set(payload.team.id, payload.team));
+        setCurrentTeam(payload.team);
+        if (payload.team.channels.length > 0) {
+          setCurrentChannel(payload.team.channels[0]);
+        }
+        showToast(`Team "${payload.team.name}" created! Code: ${payload.team.inviteCode}`, 'success');
+        break;
+      }
+
+      case 'team_joined': {
+        const payload = msg.payload as { team: Team };
+        setTeams(prev => new Map(prev).set(payload.team.id, payload.team));
+        setCurrentTeam(payload.team);
+        if (payload.team.channels.length > 0) {
+          setCurrentChannel(payload.team.channels[0]);
+        }
+        showToast(`Joined "${payload.team.name}"`, 'success');
+        break;
+      }
+
+      case 'team_left': {
+        const payload = msg.payload as { teamId: string };
+        setTeams(prev => {
+          const next = new Map(prev);
+          next.delete(payload.teamId);
+          return next;
+        });
+        setCurrentTeam(curr => curr?.id === payload.teamId ? null : curr);
+        setCurrentChannel(curr => curr?.teamId === payload.teamId ? null : curr);
+        break;
+      }
+
+      case 'channel_created': {
+        const payload = msg.payload as { teamId: string; channel: Channel };
+        setTeams(prev => {
+          const team = prev.get(payload.teamId);
+          if (!team) return prev;
+          return new Map(prev).set(payload.teamId, {
+            ...team,
+            channels: [...team.channels, payload.channel]
+          });
+        });
+        showToast(`Channel "#${payload.channel.name}" created`, 'success');
+        break;
+      }
+
+      case 'channel_deleted': {
+        const payload = msg.payload as { teamId: string; channelId: string };
+        setTeams(prev => {
+          const team = prev.get(payload.teamId);
+          if (!team) return prev;
+          return new Map(prev).set(payload.teamId, {
+            ...team,
+            channels: team.channels.filter(c => c.id !== payload.channelId)
+          });
+        });
+        setCurrentChannel(curr => curr?.id === payload.channelId ? null : curr);
+        break;
+      }
+
+      case 'channel_history': {
+        const payload = msg.payload as { channelId: string; messages: Message[] };
+        setMessages(prev => new Map(prev).set(payload.channelId, payload.messages));
         break;
       }
 
@@ -404,9 +503,70 @@ export default function App() {
 
   const handleSelectRoom = (room: Room) => {
     setCurrentRoom(room);
+    setCurrentTeam(null);
+    setCurrentChannel(null);
     setReplyingTo(null);
     // Always fetch room history when selecting a room
     send('get_room_history', { roomId: room.id });
+  };
+
+  // Team handlers
+  const handleCreateTeam = (name: string, description?: string) => {
+    send('create_team', { name, description });
+  };
+
+  const handleJoinTeam = (inviteCode: string) => {
+    send('join_team', { inviteCode });
+  };
+
+  const handleLeaveTeam = (teamId: string) => {
+    send('leave_team', { teamId });
+  };
+
+  const handleCreateChannel = (teamId: string, name: string, description?: string) => {
+    send('create_channel', { teamId, name, description });
+  };
+
+  const handleDeleteChannel = (teamId: string, channelId: string) => {
+    send('delete_channel', { teamId, channelId });
+  };
+
+  const handleSelectTeam = (team: Team) => {
+    setCurrentTeam(team);
+    setCurrentRoom(null);
+    // Select first channel if available
+    if (team.channels.length > 0) {
+      handleSelectChannel(team.channels[0]);
+    } else {
+      setCurrentChannel(null);
+    }
+  };
+
+  const handleSelectChannel = (channel: Channel) => {
+    setCurrentChannel(channel);
+    setCurrentRoom(null);
+    setReplyingTo(null);
+    // Fetch channel history
+    send('get_channel_history', { channelId: channel.id });
+  };
+
+  const handleSendChannelMessage = (content: string, imageUrl?: string) => {
+    if (currentChannel) {
+      const payload: { roomId: string; content: string; imageUrl?: string; replyTo?: { id: string; nickname: string; content: string } } = {
+        roomId: currentChannel.id,
+        content,
+        imageUrl
+      };
+      if (replyingTo) {
+        payload.replyTo = {
+          id: replyingTo.id,
+          nickname: replyingTo.nickname,
+          content: replyingTo.content.slice(0, 100)
+        };
+        setReplyingTo(null);
+      }
+      send('send_message', payload);
+    }
   };
 
   const handleLogout = () => {
@@ -450,11 +610,11 @@ export default function App() {
           user={user}
           rooms={rooms}
           currentRoom={currentRoom}
-          messages={messages.get(currentRoom?.id || '') || []}
-          typingUsers={typingUsers.get(currentRoom?.id || '') || []}
+          messages={messages.get(currentChannel?.id || currentRoom?.id || '') || []}
+          typingUsers={typingUsers.get(currentChannel?.id || currentRoom?.id || '') || []}
           replyingTo={replyingTo}
           onSelectRoom={handleSelectRoom}
-          onSendMessage={handleSendMessage}
+          onSendMessage={currentChannel ? handleSendChannelMessage : handleSendMessage}
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
           onAddReaction={handleAddReaction}
@@ -467,6 +627,17 @@ export default function App() {
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onLogout={handleLogout}
+          // Team props
+          teams={teams}
+          currentTeam={currentTeam}
+          currentChannel={currentChannel}
+          onSelectTeam={handleSelectTeam}
+          onSelectChannel={handleSelectChannel}
+          onCreateTeam={handleCreateTeam}
+          onJoinTeam={handleJoinTeam}
+          onLeaveTeam={handleLeaveTeam}
+          onCreateChannel={handleCreateChannel}
+          onDeleteChannel={handleDeleteChannel}
         />
       )}
       <div className="toast-container">
