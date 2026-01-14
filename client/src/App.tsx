@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ChatScreen } from './components/ChatScreen';
 import { Toast } from './components/Toast';
-import type { Room, Message, ServerMessage, Reaction } from '../../shared/types';
+import type { Room, Message, ServerMessage } from '../../shared/types';
 
 interface UserData {
   id: string;
@@ -22,6 +22,32 @@ interface TypingUser {
   nickname: string;
 }
 
+// Request notification permission
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+// Show browser notification
+function showNotification(title: string, body: string) {
+  if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+    const notification = new Notification(title, {
+      body,
+      icon: '/favicon.ico',
+      tag: 'chat-message',
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    // Auto close after 5 seconds
+    setTimeout(() => notification.close(), 5000);
+  }
+}
+
 export default function App() {
   const [user, setUser] = useLocalStorage<UserData | null>('chat-user', null);
   const [rooms, setRooms] = useState<Map<string, Room>>(new Map());
@@ -30,6 +56,15 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser[]>>(new Map());
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // Track if we've already sent reconnect for this connection
+  const hasReconnectedRef = useRef(false);
+  const currentUserIdRef = useRef<string | null>(null);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
 
   const showToast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
     const id = Date.now().toString();
@@ -45,6 +80,7 @@ export default function App() {
       case 'room_joined': {
         const payload = msg.payload as { room: Room; user: { id: string; nickname: string } };
         setUser({ id: payload.user.id, nickname: payload.user.nickname });
+        currentUserIdRef.current = payload.user.id;
         setRooms(prev => new Map(prev).set(payload.room.id, payload.room));
         setCurrentRoom(payload.room);
         showToast(
@@ -79,6 +115,16 @@ export default function App() {
           const roomMsgs = prev.get(payload.message.roomId) || [];
           return new Map(prev).set(payload.message.roomId, [...roomMsgs, payload.message]);
         });
+
+        // Show browser notification for messages from others
+        if (payload.message.userId !== currentUserIdRef.current) {
+          showNotification(
+            payload.message.nickname,
+            payload.message.content.length > 100
+              ? payload.message.content.slice(0, 100) + '...'
+              : payload.message.content
+          );
+        }
         break;
       }
 
@@ -197,7 +243,9 @@ export default function App() {
 
       case 'reconnected': {
         const payload = msg.payload as { user: { id: string; nickname: string }; rooms: Room[] };
-        setUser({ id: payload.user.id, nickname: payload.user.nickname });
+        currentUserIdRef.current = payload.user.id;
+        // Don't call setUser here to avoid triggering reconnect loop
+        // The user data is already in localStorage
         const roomMap = new Map<string, Room>();
         payload.rooms.forEach(r => roomMap.set(r.id, r));
         setRooms(roomMap);
@@ -226,10 +274,17 @@ export default function App() {
 
   const { send, connected } = useWebSocket(handleMessage);
 
-  // Reconnect with stored user data
+  // Reconnect with stored user data - only once per connection
   useEffect(() => {
-    if (connected && user) {
+    if (connected && user && !hasReconnectedRef.current) {
+      hasReconnectedRef.current = true;
+      currentUserIdRef.current = user.id;
       send('reconnect', { userId: user.id, nickname: user.nickname });
+    }
+
+    // Reset the flag when disconnected
+    if (!connected) {
+      hasReconnectedRef.current = false;
     }
   }, [connected, user, send]);
 
@@ -324,6 +379,8 @@ export default function App() {
     setCurrentRoom(null);
     setMessages(new Map());
     setReplyingTo(null);
+    hasReconnectedRef.current = false;
+    currentUserIdRef.current = null;
   };
 
   const isLoggedIn = user && rooms.size > 0;
