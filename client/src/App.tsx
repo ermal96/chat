@@ -30,7 +30,31 @@ function requestNotificationPermission() {
   }
 }
 
-// Show browser notification
+// Play notification sound
+function playNotificationSound() {
+  try {
+    // Create and play a simple notification sound
+    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800; // Hz
+    oscillator.type = 'sine';
+
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (e) {
+    console.log('Could not play notification sound:', e);
+  }
+}
+
+// Show browser notification (sound is handled separately)
 function showNotification(title: string, body: string) {
   if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
     const notification = new Notification(title, {
@@ -140,8 +164,12 @@ export default function App() {
           return new Map(prev).set(payload.message.roomId, [...roomMsgs, payload.message]);
         });
 
-        // Show browser notification for messages from others
+        // Play sound and show notification for messages from others
         if (payload.message.userId !== currentUserIdRef.current) {
+          // Always play sound for incoming messages
+          playNotificationSound();
+
+          // Show browser notification if document is hidden
           showNotification(
             payload.message.nickname,
             payload.message.content.length > 100

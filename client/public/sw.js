@@ -35,6 +35,9 @@ self.addEventListener('push', (event) => {
     badge: '/favicon.ico',
     tag: data.tag || 'chat-message',
     renotify: true,
+    silent: false, // Ensure sound plays
+    vibrate: [200, 100, 200], // Vibration pattern for mobile
+    requireInteraction: false, // Auto-dismiss after a while
     data: {
       url: data.url || '/',
       roomId: data.roomId
