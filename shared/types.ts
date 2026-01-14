@@ -1,4 +1,4 @@
-// Room types
+// Room types (for direct chats)
 export type RoomType = 'group' | 'direct';
 
 export interface Room {
@@ -12,6 +12,34 @@ export interface Room {
   onlineMembers?: string[]; // User IDs of online members
   unreadCount?: number;
   lastMessage?: Message;
+}
+
+// Team types (like MS Teams)
+export interface Channel {
+  id: string;
+  name: string;
+  description?: string;
+  teamId: string;
+  unreadCount?: number;
+  lastMessage?: Message;
+}
+
+export interface TeamMember {
+  id: string;
+  nickname: string;
+  role: 'owner' | 'member';
+  isOnline?: boolean;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description?: string;
+  inviteCode: string;
+  channels: Channel[];
+  members: TeamMember[];
+  memberCount: number;
+  createdAt: string;
 }
 
 export interface User {
@@ -70,7 +98,14 @@ export type ClientMessageType =
   | 'get_rooms'
   | 'get_room_history'
   | 'reconnect'
-  | 'mark_read';
+  | 'mark_read'
+  // Team operations
+  | 'create_team'
+  | 'join_team'
+  | 'leave_team'
+  | 'create_channel'
+  | 'delete_channel'
+  | 'get_channel_history';
 
 export type ServerMessageType =
   | 'registered'
@@ -91,7 +126,15 @@ export type ServerMessageType =
   | 'room_list'
   | 'error'
   | 'room_history'
-  | 'reconnected';
+  | 'reconnected'
+  // Team events
+  | 'team_created'
+  | 'team_joined'
+  | 'team_left'
+  | 'team_list'
+  | 'channel_created'
+  | 'channel_deleted'
+  | 'channel_history';
 
 export interface ClientMessage {
   type: ClientMessageType;
@@ -178,6 +221,35 @@ export interface RegisterPayload {
 export interface LoginPayload {
   email: string;
   password: string;
+}
+
+// Team payloads
+export interface CreateTeamPayload {
+  name: string;
+  description?: string;
+}
+
+export interface JoinTeamPayload {
+  inviteCode: string;
+}
+
+export interface LeaveTeamPayload {
+  teamId: string;
+}
+
+export interface CreateChannelPayload {
+  teamId: string;
+  name: string;
+  description?: string;
+}
+
+export interface DeleteChannelPayload {
+  teamId: string;
+  channelId: string;
+}
+
+export interface GetChannelHistoryPayload {
+  channelId: string;
 }
 
 // Avatar colors

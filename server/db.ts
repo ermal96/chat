@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { User, Room, Message } from './models';
-import { Room as RoomType, User as UserType, Message as MessageType, RoomType as RoomTypeEnum, Reaction } from '../shared/types';
+import { User, Room, Message, Team } from './models';
+import { Room as RoomType, User as UserType, Message as MessageType, RoomType as RoomTypeEnum, Reaction, Team as TeamType, Channel as ChannelType, TeamMember } from '../shared/types';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chat';
 
@@ -84,6 +84,37 @@ function aggregateReactions(reactions: { emoji: string; userId: string }[]): Rea
   });
 
   return Array.from(reactionMap.entries()).map(([emoji, users]) => ({ emoji, users }));
+}
+
+async function toTeamType(doc: any): Promise<TeamType> {
+  // Get user info for members
+  const userIds = doc.members.map((m: any) => m.userId);
+  const users = await User.find({ _id: { $in: userIds } });
+  const userMap = new Map(users.map(u => [u._id, u.nickname]));
+
+  const members: TeamMember[] = doc.members.map((m: any) => ({
+    id: m.userId,
+    nickname: userMap.get(m.userId) || 'Unknown',
+    role: m.role
+  }));
+
+  const channels: ChannelType[] = doc.channels.map((c: any) => ({
+    id: c._id,
+    name: c.name,
+    description: c.description,
+    teamId: doc._id
+  }));
+
+  return {
+    id: doc._id,
+    name: doc.name,
+    description: doc.description,
+    inviteCode: doc.inviteCode,
+    channels,
+    members,
+    memberCount: doc.members.length,
+    createdAt: doc.createdAt?.toISOString() || new Date().toISOString()
+  };
 }
 
 export const database = {
@@ -332,5 +363,109 @@ export const database = {
   async inviteCodeExists(code: string): Promise<boolean> {
     const room = await Room.findOne({ inviteCode: code.toUpperCase() });
     return !!room;
+  },
+
+  // Team operations
+  async createTeam(id: string, name: string, description: string | undefined, inviteCode: string, creatorId: string): Promise<TeamType> {
+    const team = new Team({
+      _id: id,
+      name,
+      description,
+      inviteCode: inviteCode.toUpperCase(),
+      channels: [{ _id: `${id}-general`, name: 'General', createdAt: new Date() }],
+      members: [{ userId: creatorId, role: 'owner', joinedAt: new Date() }]
+    });
+
+    await team.save();
+    return toTeamType(team);
+  },
+
+  async getTeamById(id: string): Promise<TeamType | undefined> {
+    const team = await Team.findById(id);
+    return team ? toTeamType(team) : undefined;
+  },
+
+  async getTeamByInviteCode(code: string): Promise<TeamType | undefined> {
+    const team = await Team.findOne({ inviteCode: code.toUpperCase() });
+    return team ? toTeamType(team) : undefined;
+  },
+
+  async getUserTeams(userId: string): Promise<TeamType[]> {
+    const teams = await Team.find({ 'members.userId': userId });
+    return Promise.all(teams.map(toTeamType));
+  },
+
+  async addMemberToTeam(teamId: string, userId: string): Promise<void> {
+    await Team.findByIdAndUpdate(teamId, {
+      $addToSet: { members: { userId, role: 'member', joinedAt: new Date() } }
+    });
+  },
+
+  async removeMemberFromTeam(teamId: string, userId: string): Promise<void> {
+    const team = await Team.findByIdAndUpdate(
+      teamId,
+      { $pull: { members: { userId } } },
+      { new: true }
+    );
+
+    if (team && team.members.length === 0) {
+      await Team.findByIdAndDelete(teamId);
+      // Delete all channel messages
+      for (const channel of team.channels) {
+        await Message.deleteMany({ roomId: channel._id });
+      }
+    }
+  },
+
+  async createChannel(teamId: string, channelId: string, name: string, description?: string): Promise<ChannelType | undefined> {
+    const team = await Team.findByIdAndUpdate(
+      teamId,
+      { $push: { channels: { _id: channelId, name, description, createdAt: new Date() } } },
+      { new: true }
+    );
+
+    if (!team) return undefined;
+
+    return {
+      id: channelId,
+      name,
+      description,
+      teamId
+    };
+  },
+
+  async deleteChannel(teamId: string, channelId: string): Promise<boolean> {
+    const result = await Team.updateOne(
+      { _id: teamId },
+      { $pull: { channels: { _id: channelId } } }
+    );
+
+    if (result.modifiedCount > 0) {
+      await Message.deleteMany({ roomId: channelId });
+      return true;
+    }
+    return false;
+  },
+
+  async getChannelMessages(channelId: string): Promise<MessageType[]> {
+    const messages = await Message.find({ roomId: channelId, deleted: false })
+      .sort({ createdAt: -1 })
+      .limit(100);
+    return messages.map(toMessageType).reverse();
+  },
+
+  async teamInviteCodeExists(code: string): Promise<boolean> {
+    const team = await Team.findOne({ inviteCode: code.toUpperCase() });
+    return !!team;
+  },
+
+  async isUserInTeam(teamId: string, userId: string): Promise<boolean> {
+    const team = await Team.findOne({ _id: teamId, 'members.userId': userId });
+    return !!team;
+  },
+
+  async isUserTeamOwner(teamId: string, userId: string): Promise<boolean> {
+    const team = await Team.findOne({ _id: teamId, 'members.userId': userId, 'members.role': 'owner' });
+    return !!team;
   }
 };
