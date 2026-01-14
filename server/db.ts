@@ -1,22 +1,34 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import { User, Room, Message, Team } from './models';
 import { Room as RoomType, User as UserType, Message as MessageType, RoomType as RoomTypeEnum, Reaction, Team as TeamType, Channel as ChannelType, TeamMember } from '../shared/types';
 
-let mongoServer: MongoMemoryServer | null = null;
+// Dynamic import for mongodb-memory-server (dev only)
+let mongoServer: any = null;
 
 // Connect to MongoDB
 export async function connectDB(): Promise<void> {
   try {
-    let uri = process.env.MONGODB_URI;
+    let uri: string = process.env.MONGODB_URI || '';
 
     if (!uri) {
-      // Use in-memory MongoDB for development
+      // Use in-memory MongoDB for development only
       console.log('No MONGODB_URI set, starting in-memory MongoDB...');
-      mongoServer = await MongoMemoryServer.create();
-      uri = mongoServer.getUri();
-      console.log('In-memory MongoDB started');
+      try {
+        const { MongoMemoryServer } = await import('mongodb-memory-server');
+        mongoServer = await MongoMemoryServer.create();
+        uri = mongoServer.getUri();
+        console.log('In-memory MongoDB started');
+      } catch (err) {
+        console.error('mongodb-memory-server not available. Please set MONGODB_URI environment variable.');
+        console.error('In production, MONGODB_URI must be set to connect to a real MongoDB instance.');
+        process.exit(1);
+      }
+    }
+
+    if (!uri) {
+      console.error('No MongoDB URI available');
+      process.exit(1);
     }
 
     await mongoose.connect(uri);
