@@ -562,7 +562,8 @@ body {
 /* ============================================
    MESSAGE LIST - Teams style
    ============================================ */
-.message-list {
+.message-list,
+.messages {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
@@ -607,15 +608,23 @@ body {
   display: none;
 }
 
-.message-content {
+.message-content,
+.message-content-wrapper {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  flex: 1;
 }
 
-.message.own .message-content {
+.message.own .message-content,
+.message.own .message-content-wrapper {
   align-items: flex-end;
+}
+
+.message-avatar-spacer {
+  width: 32px;
+  flex-shrink: 0;
 }
 
 .message-header {
@@ -664,12 +673,107 @@ body {
   border-top-right-radius: 0;
 }
 
-.message-bubble img {
+.message-bubble img,
+.message-image {
   max-width: 300px;
   max-height: 200px;
   border-radius: 4px;
   cursor: pointer;
   display: block;
+}
+
+.message-text {
+  word-break: break-word;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.edited-badge {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Edit form */
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-form input {
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.edit-form input:focus {
+  border-color: var(--primary);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.edit-actions button {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+}
+
+.edit-actions .save {
+  background: var(--primary);
+  color: white;
+}
+
+.edit-actions .cancel {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Context menu */
+.context-menu {
+  position: fixed;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.context-menu button.danger {
+  color: var(--danger);
 }
 
 /* Message actions on hover */
@@ -772,9 +876,44 @@ body {
   background: var(--bg-active);
 }
 
-.reaction.own {
+.reaction.own,
+.reaction.active {
   background: var(--primary);
   color: white;
+  border: 1px solid transparent;
+}
+
+.reaction-emoji {
+  font-size: 14px;
+}
+
+.reaction-count {
+  font-size: 12px;
+}
+
+/* Reply preview in messages */
+.reply-preview {
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 4px 4px 0;
+  margin-bottom: 4px;
+  font-size: 12px;
+  max-width: 250px;
+  overflow: hidden;
+}
+
+.reply-preview .reply-author {
+  font-weight: 600;
+  color: var(--primary-light);
+  margin-right: 6px;
+}
+
+.reply-preview .reply-text {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Reply indicator */

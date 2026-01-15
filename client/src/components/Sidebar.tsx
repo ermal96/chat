@@ -96,18 +96,18 @@ export function Sidebar({
               </div>
               <div className="room-content">
                 <div className="room-name">{room.name}</div>
-                <div className="room-meta">
-                  <span>{room.memberCount || 1} members</span>
-                  {room.onlineCount && room.onlineCount > 0 && (
-                    <span className="online-indicator">{room.onlineCount} online</span>
-                  )}
+                <div className="room-preview">
+                  {room.memberCount || 1} members
+                  {room.onlineCount && room.onlineCount > 0 && ` · ${room.onlineCount} online`}
                 </div>
               </div>
-              {room.unreadCount && room.unreadCount > 0 && (
-                <div className="unread-badge notification-badge">
-                  {room.unreadCount > 99 ? '99+' : room.unreadCount}
-                </div>
-              )}
+              <div className="room-meta">
+                {room.unreadCount && room.unreadCount > 0 && (
+                  <span className="unread-badge">
+                    {room.unreadCount > 99 ? '99+' : room.unreadCount}
+                  </span>
+                )}
+              </div>
             </li>
           ))}
 
