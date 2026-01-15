@@ -1666,9 +1666,19 @@ body {
 .gif-picker {
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 12px;
   box-shadow: var(--shadow);
+}
+
+/* Emoji picker grid layout */
+.emoji-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  width: 240px;
 }
 
 .emoji-grid {
@@ -1680,22 +1690,23 @@ body {
 }
 
 .emoji-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 4px;
-  font-size: 18px;
+  border-radius: 6px;
+  font-size: 22px;
   cursor: pointer;
   transition: all 0.1s ease;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
 
 .emoji-btn:hover {
   background: var(--bg-hover);
-  transform: scale(1.1);
+  transform: scale(1.15);
 }
 
 .text-effect-btn {

@@ -229,8 +229,9 @@ export function MessageInput({
             autoComplete="off"
           />
 
-          {/* Toolbar at bottom - Teams style */}
+          {/* Toolbar at bottom - Teams style with outline icons */}
           <div className="input-toolbar">
+            {/* Format text */}
             <button
               type="button"
               className="input-action-btn"
@@ -240,16 +241,25 @@ export function MessageInput({
               }}
               title="Format"
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M5 17v2h14v-2H5zm4.5-4.2h5l.9 2.2h2.1L12.75 4h-1.5L6.5 15h2.1l.9-2.2zM12 5.98L13.87 11h-3.74L12 5.98z"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <path d="M4 7V4h16v3"/>
+                <path d="M9 20h6"/>
+                <path d="M12 4v16"/>
               </svg>
             </button>
 
+            {/* Attach file */}
+            <button type="button" className="input-action-btn" title="Attach">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+
+            {/* Mention */}
             <button
               type="button"
               className="input-action-btn"
               onClick={() => {
-                // Insert @ at cursor position
                 const cursorPos = inputRef.current?.selectionStart || content.length;
                 const newContent = content.slice(0, cursorPos) + '@' + content.slice(cursorPos);
                 setContent(newContent);
@@ -260,11 +270,13 @@ export function MessageInput({
               }}
               title="Mention"
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/>
               </svg>
             </button>
 
+            {/* Emoji */}
             <button
               type="button"
               className="input-action-btn"
@@ -274,11 +286,15 @@ export function MessageInput({
               }}
               title="Emoji"
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                <line x1="9" y1="9" x2="9.01" y2="9"/>
+                <line x1="15" y1="9" x2="15.01" y2="9"/>
               </svg>
             </button>
 
+            {/* GIF */}
             <button
               type="button"
               className="input-action-btn"
@@ -288,11 +304,13 @@ export function MessageInput({
               }}
               title="GIF"
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M11.5 9H13v6h-1.5V9zM9 9H6c-.6 0-1 .5-1 1v4c0 .5.4 1 1 1h3c.6 0 1-.5 1-1v-2H8.5v1.5h-2v-3H10V10c0-.5-.4-1-1-1zm10 1.5V9h-4.5v6H16v-2h2v-1.5h-2v-1h3z"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                <text x="6" y="15" fontSize="8" fill="currentColor" stroke="none" fontWeight="bold">GIF</text>
               </svg>
             </button>
 
+            {/* Stickers */}
             <button
               type="button"
               className="input-action-btn"
@@ -302,16 +320,19 @@ export function MessageInput({
               }}
               title="Stickers"
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M21.97 13.52v-.04C23.21 12.38 24 10.78 24 9c0-3.31-2.69-6-6-6-.26 0-.52.02-.78.06C16.19 1.23 14.24 0 12 0S7.81 1.23 6.78 3.06C6.52 3.02 6.26 3 6 3c-3.31 0-6 2.69-6 6 0 1.78.79 3.38 2.02 4.48v.04C.79 14.62 0 16.22 0 18c0 3.31 2.69 6 6 6 1.39 0 2.67-.48 3.69-1.28.74.18 1.51.28 2.31.28s1.57-.1 2.31-.28c1.02.8 2.3 1.28 3.69 1.28 3.31 0 6-2.69 6-6 0-1.78-.79-3.38-2.03-4.48zM12 21c-4.41 0-8-3.59-8-8 0-3.45 2.2-6.39 5.27-7.51.45-.14.91-.26 1.39-.34C11.1 5.05 11.54 5 12 5s.9.05 1.34.15c.48.08.94.2 1.39.34C17.8 6.61 20 9.55 20 13c0 4.41-3.59 8-8 8z"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <path d="M12 2a10 10 0 100 20 10 10 0 100-20z"/>
+                <path d="M12 2a10 10 0 019.54 13H12V5.46A10 10 0 0112 2z"/>
               </svg>
             </button>
 
             <div className="toolbar-spacer"></div>
 
+            {/* Send button */}
             <button type="submit" className="send-btn" disabled={!content.trim()}>
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
               </svg>
             </button>
           </div>
