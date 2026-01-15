@@ -493,6 +493,31 @@ body {
   color: var(--text-primary);
 }
 
+.room-name-editable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.room-name-editable:hover {
+  background: var(--bg-hover);
+}
+
+.room-name-editable .edit-icon {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.room-name-editable:hover .edit-icon {
+  opacity: 0.6;
+}
+
 .member-count {
   font-size: 12px;
   color: var(--text-muted);

@@ -34,6 +34,7 @@ interface ChatScreenProps {
   onCreateRoom: (nickname: string, roomName: string, roomType: 'group' | 'direct') => void;
   onJoinRoom: (nickname: string, inviteCode: string) => void;
   onChangeNickname: (newNickname: string) => void;
+  onRenameRoom: (roomId: string, newName: string) => void;
   onLogout: () => void;
 }
 
@@ -59,6 +60,7 @@ export function ChatScreen({
   onCreateRoom,
   onJoinRoom,
   onChangeNickname,
+  onRenameRoom,
   onLogout
 }: ChatScreenProps) {
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -66,7 +68,9 @@ export function ChatScreen({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showEditNickname, setShowEditNickname] = useState(false);
   const [showMembersPanel, setShowMembersPanel] = useState(false);
+  const [showEditRoomName, setShowEditRoomName] = useState(false);
   const [newNickname, setNewNickname] = useState(user.nickname);
+  const [newRoomName, setNewRoomName] = useState('');
 
   const isOwner = currentRoom?.ownerId === user.id;
 
@@ -81,6 +85,20 @@ export function ChatScreen({
       onChangeNickname(newNickname.trim());
     }
     setShowEditNickname(false);
+  };
+
+  const handleSaveRoomName = () => {
+    if (currentRoom && newRoomName.trim() && newRoomName.trim() !== currentRoom.name) {
+      onRenameRoom(currentRoom.id, newRoomName.trim());
+    }
+    setShowEditRoomName(false);
+  };
+
+  const handleEditRoomName = () => {
+    if (currentRoom) {
+      setNewRoomName(currentRoom.name);
+      setShowEditRoomName(true);
+    }
   };
 
   const handleLeaveRoom = () => {
@@ -226,7 +244,17 @@ export function ChatScreen({
                     {getInitials(currentRoom.name)}
                   </div>
                   <div className="room-details">
-                    <h3>{currentRoom.name}</h3>
+                    <h3
+                      className="room-name-editable"
+                      onClick={handleEditRoomName}
+                      title="Click to rename"
+                    >
+                      {currentRoom.name}
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" className="edit-icon">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </h3>
                   </div>
                 </div>
 
@@ -369,6 +397,36 @@ export function ChatScreen({
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowEditNickname(false)}>Cancel</button>
               <button className="btn primary" onClick={handleSaveNickname}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Room Name Modal */}
+      {showEditRoomName && currentRoom && (
+        <div className="modal-overlay" onClick={() => setShowEditRoomName(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Rename Chat</h3>
+              <button className="close-btn" onClick={() => setShowEditRoomName(false)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <input
+                type="text"
+                value={newRoomName}
+                onChange={e => setNewRoomName(e.target.value)}
+                placeholder="Enter new chat name"
+                maxLength={50}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSaveRoomName();
+                  if (e.key === 'Escape') setShowEditRoomName(false);
+                }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn secondary" onClick={() => setShowEditRoomName(false)}>Cancel</button>
+              <button className="btn primary" onClick={handleSaveRoomName}>Save</button>
             </div>
           </div>
         </div>

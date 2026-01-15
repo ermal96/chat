@@ -422,6 +422,23 @@ export default function App() {
         break;
       }
 
+      case 'room_renamed': {
+        const payload = msg.payload as { roomId: string; name: string; renamedBy: { id: string; nickname: string } };
+        setRooms(prev => {
+          const room = prev.get(payload.roomId);
+          if (!room) return prev;
+          return new Map(prev).set(payload.roomId, { ...room, name: payload.name });
+        });
+        // Update currentRoom if it's the one being renamed
+        setCurrentRoom(curr => curr?.id === payload.roomId ? { ...curr, name: payload.name } : curr);
+        if (payload.renamedBy.id !== currentUserIdRef.current) {
+          showToast(`${payload.renamedBy.nickname} renamed the chat to "${payload.name}"`, 'info');
+        } else {
+          showToast(`Chat renamed to "${payload.name}"`, 'success');
+        }
+        break;
+      }
+
       case 'messages_read': {
         const payload = msg.payload as { roomId: string; messageIds: string[]; expiresAt: string };
         // Update messages with expiration time
@@ -600,6 +617,10 @@ export default function App() {
     send('change_nickname', { nickname: newNickname });
   };
 
+  const handleRenameRoom = (roomId: string, newName: string) => {
+    send('rename_room', { roomId, name: newName });
+  };
+
   const handleLogout = () => {
     rooms.forEach(room => {
       send('leave_room', { roomId: room.id });
@@ -709,6 +730,7 @@ export default function App() {
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onChangeNickname={handleChangeNickname}
+          onRenameRoom={handleRenameRoom}
           onLogout={handleLogout}
         />
       )}

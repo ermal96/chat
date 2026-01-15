@@ -95,6 +95,7 @@ export type ClientMessageType =
   | 'join_room'
   | 'leave_room'
   | 'kick_user'
+  | 'rename_room'
   | 'send_message'
   | 'edit_message'
   | 'delete_message'
@@ -140,6 +141,7 @@ export type ServerMessageType =
   | 'nickname_changed'
   | 'push_subscribed'
   | 'messages_read'
+  | 'room_renamed'
   // Team events
   | 'team_created'
   | 'team_joined'
@@ -214,6 +216,11 @@ export interface LeaveRoomPayload {
 export interface KickUserPayload {
   roomId: string;
   userId: string; // User to kick
+}
+
+export interface RenameRoomPayload {
+  roomId: string;
+  name: string;
 }
 
 export interface ReconnectPayload {

@@ -299,6 +299,14 @@ export const database = {
     return !!result;
   },
 
+  async renameRoom(roomId: string, newName: string): Promise<boolean> {
+    const result = await Room.updateOne(
+      { _id: roomId },
+      { name: newName }
+    );
+    return result.modifiedCount > 0;
+  },
+
   async getRoomMembers(roomId: string): Promise<{ id: string; nickname: string }[]> {
     const room = await Room.findById(roomId);
     if (!room) return [];

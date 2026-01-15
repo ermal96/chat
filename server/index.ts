@@ -18,6 +18,7 @@ import {
   TypingPayload,
   LeaveRoomPayload,
   KickUserPayload,
+  RenameRoomPayload,
   ReconnectPayload,
   RegisterPayload,
   LoginPayload,
@@ -261,6 +262,9 @@ async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<voi
       break;
     case 'kick_user':
       await handleKickUser(ws, client, message.payload as KickUserPayload);
+      break;
+    case 'rename_room':
+      await handleRenameRoom(ws, client, message.payload as RenameRoomPayload);
       break;
     case 'send_message':
       await handleSendMessage(ws, client, message.payload as SendMessagePayload);
@@ -617,6 +621,50 @@ async function handleKickUser(ws: WebSocket, client: ConnectedClient, payload: K
 async function getUserNickname(userId: string): Promise<string> {
   const user = await database.getUser(userId);
   return user?.nickname || 'Unknown';
+}
+
+async function handleRenameRoom(ws: WebSocket, client: ConnectedClient, payload: RenameRoomPayload): Promise<void> {
+  const { roomId, name } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  if (!client.rooms.has(roomId)) {
+    send(ws, { type: 'error', payload: { message: 'Not in this room' } });
+    return;
+  }
+
+  if (!name || name.trim().length === 0) {
+    send(ws, { type: 'error', payload: { message: 'Room name cannot be empty' } });
+    return;
+  }
+
+  if (name.trim().length > 50) {
+    send(ws, { type: 'error', payload: { message: 'Room name must be 50 characters or less' } });
+    return;
+  }
+
+  const newName = name.trim();
+  const renamed = await database.renameRoom(roomId, newName);
+
+  if (!renamed) {
+    send(ws, { type: 'error', payload: { message: 'Failed to rename room' } });
+    return;
+  }
+
+  // Broadcast to all room members
+  broadcastToRoom(roomId, {
+    type: 'room_renamed',
+    payload: {
+      roomId,
+      name: newName,
+      renamedBy: { id: client.user.id, nickname: client.user.nickname }
+    }
+  });
+
+  console.log(`Room ${roomId} renamed to "${newName}" by ${client.user.nickname}`);
 }
 
 async function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: SendMessagePayload): Promise<void> {
