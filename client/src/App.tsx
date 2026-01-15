@@ -215,7 +215,18 @@ export default function App() {
           // Always play sound for incoming messages
           playNotificationSound();
 
-          // Show browser notification
+          // Show in-app toast notification
+          const messagePreview = payload.message.content.length > 50
+            ? payload.message.content.slice(0, 50) + '...'
+            : payload.message.content;
+
+          if (userMentioned) {
+            showToast(`${payload.message.nickname} mentioned you: ${messagePreview}`, 'info');
+          } else {
+            showToast(`${payload.message.nickname}: ${messagePreview}`, 'info');
+          }
+
+          // Show browser notification (for when app is in background)
           if (userMentioned) {
             // Special notification for mentions
             showNotification(
