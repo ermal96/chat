@@ -43,27 +43,28 @@ export function WelcomeScreen({
       <div className="welcome-screen">
         <div className="welcome-container">
           <button className="back-btn" onClick={() => setMode('main')}>← Back</button>
-          <h1>Welcome Back</h1>
-          <p>Login to access your rooms</p>
+          <div className="welcome-logo">🔥</div>
+          <h1>Welcome Back!</h1>
+          <p className="tagline">Ready to share some memes?</p>
 
           <div className="auth-form">
             <input
               type="email"
-              placeholder="Email"
+              placeholder="📧 Email"
               value={loginEmail}
               onChange={e => setLoginEmail(e.target.value)}
               autoComplete="email"
             />
             <input
               type="password"
-              placeholder="Password"
+              placeholder="🔒 Password"
               value={loginPassword}
               onChange={e => setLoginPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               autoComplete="current-password"
             />
-            <button className="btn primary" onClick={handleLogin}>
-              Login
+            <button className="btn primary large" onClick={handleLogin}>
+              🚀 Login
             </button>
           </div>
 
@@ -83,13 +84,14 @@ export function WelcomeScreen({
       <div className="welcome-screen">
         <div className="welcome-container">
           <button className="back-btn" onClick={() => setMode('main')}>← Back</button>
-          <h1>Create Account</h1>
-          <p>Register to start chatting</p>
+          <div className="welcome-logo">✨</div>
+          <h1>Join the Party!</h1>
+          <p className="tagline">Create your account to start memeing</p>
 
           <div className="auth-form">
             <input
               type="text"
-              placeholder="Nickname"
+              placeholder="😎 Nickname"
               value={registerNickname}
               onChange={e => setRegisterNickname(e.target.value)}
               maxLength={20}
@@ -97,21 +99,21 @@ export function WelcomeScreen({
             />
             <input
               type="email"
-              placeholder="Email"
+              placeholder="📧 Email"
               value={registerEmail}
               onChange={e => setRegisterEmail(e.target.value)}
               autoComplete="email"
             />
             <input
               type="password"
-              placeholder="Password (min 6 characters)"
+              placeholder="🔒 Password (min 6 characters)"
               value={registerPassword}
               onChange={e => setRegisterPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleRegister()}
               autoComplete="new-password"
             />
-            <button className="btn primary" onClick={handleRegister}>
-              Create Account
+            <button className="btn primary large" onClick={handleRegister}>
+              🎉 Create Account
             </button>
           </div>
 
@@ -130,20 +132,23 @@ export function WelcomeScreen({
   return (
     <div className="welcome-screen">
       <div className="welcome-container">
-        <h1>Cunat Teams</h1>
-        <p>Connect and collaborate with your team</p>
+        <div className="welcome-logo">🔥</div>
+        <h1>Meme Chat</h1>
+        <p className="tagline">The ultimate place for memes, GIFs & fun conversations</p>
 
         <div className="auth-buttons">
           <button className="btn primary large" onClick={() => setMode('login')}>
-            Login
+            🚀 Login
           </button>
-          <button className="btn secondary large" onClick={() => setMode('register')}>
-            Create Account
+          <button className="btn outline large" onClick={() => setMode('register')}>
+            ✨ Create Account
           </button>
         </div>
 
         <p className="info-text">
-          Messages auto-delete after 2 minutes
+          🎭 Share memes • 📸 Send GIFs • 💬 Chat with friends
+          <br />
+          <span style={{ opacity: 0.7, fontSize: '12px' }}>Messages auto-delete for privacy</span>
         </p>
       </div>
     </div>

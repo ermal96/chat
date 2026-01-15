@@ -286,17 +286,32 @@ export function MessageList({
                 </div>
               )}
 
-              {/* Message actions (on hover) */}
+              {/* Quick Reactions Bar */}
               <div className="message-actions">
+                <div className="quick-reactions">
+                  {['😂', '❤️', '🔥', '👍', '😮'].map(emoji => (
+                    <button
+                      key={emoji}
+                      className="quick-reaction-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddReaction(msg.id, emoji);
+                      }}
+                      title={`React with ${emoji}`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
                 <button
                   className="action-btn"
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id);
                   }}
-                  title="React"
+                  title="More reactions"
                 >
-                  😊
+                  ➕
                 </button>
                 <button
                   className="action-btn"
@@ -306,7 +321,7 @@ export function MessageList({
                   }}
                   title="Reply"
                 >
-                  ↩
+                  ↩️
                 </button>
                 {isOwn && (
                   <>
@@ -354,9 +369,10 @@ export function MessageList({
 
       {messages.length === 0 && (
         <div className="no-messages">
-          <div className="empty-icon">💬</div>
-          <p>No messages yet</p>
-          <p className="subtitle">Messages auto-delete after 2 minutes</p>
+          <div className="empty-icon">🎉</div>
+          <p>Start the meme party!</p>
+          <p className="subtitle">Share GIFs, memes, and messages with friends</p>
+          <p className="subtitle" style={{ marginTop: '8px', fontSize: '12px', opacity: 0.7 }}>💡 Tip: Use @ to mention people</p>
         </div>
       )}
 

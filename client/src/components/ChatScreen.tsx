@@ -123,16 +123,15 @@ export function ChatScreen({
         <main className="chat-main">
           {!currentRoom ? (
             <div className="no-room">
-              <div className="no-room-icon">
-                <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor" style={{ opacity: 0.5 }}>
-                  <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-                </svg>
-              </div>
-              <h3>Welcome to Cunat Chat</h3>
-              <p>Select a chat from the sidebar or start a new conversation</p>
+              <div className="no-room-icon">🎭</div>
+              <h3>Welcome to Meme Chat!</h3>
+              <p>Select a chat from the sidebar or start a new conversation to share memes and GIFs with friends</p>
               <div className="welcome-actions">
                 <button className="btn primary" onClick={() => setShowNewRoomModal(true)}>
-                  Start a Chat
+                  ✨ Create Room
+                </button>
+                <button className="btn ghost" onClick={() => setShowNewRoomModal(true)}>
+                  🔗 Join Room
                 </button>
               </div>
             </div>
@@ -146,13 +145,16 @@ export function ChatScreen({
                 </button>
 
                 <div className="room-info">
-                  <div className="room-avatar" style={{ backgroundColor: getAvatarColor(currentRoom.id) }}>
+                  <div
+                    className="room-avatar"
+                    style={{ background: `linear-gradient(135deg, ${getAvatarColor(currentRoom.id)}, #8b5cf6)` }}
+                  >
                     {getInitials(currentRoom.name)}
                   </div>
                   <div className="room-details">
-                    <h3>{currentRoom.name}</h3>
+                    <h3>{currentRoom.name} {isOwner && '👑'}</h3>
                     <span className="member-count">
-                      {currentRoom.memberCount || 1} member{(currentRoom.memberCount || 1) !== 1 ? 's' : ''}
+                      👥 {currentRoom.memberCount || 1} member{(currentRoom.memberCount || 1) !== 1 ? 's' : ''}
                       {currentRoom.onlineMembers && currentRoom.onlineMembers.length > 0 && (
                         <span className="online-count"> · {currentRoom.onlineMembers.length} online</span>
                       )}
@@ -162,19 +164,13 @@ export function ChatScreen({
 
                 <div className="room-actions">
                   <button className="btn-icon" onClick={() => setShowMembersPanel(true)} title="Members">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-                    </svg>
+                    👥
                   </button>
                   <button className="btn-icon" onClick={() => setShowInviteModal(true)} title="Invite">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                      <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                    </svg>
+                    🔗
                   </button>
                   <button className="btn-icon danger" onClick={handleLeaveRoom} title="Leave Room">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                      <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-                    </svg>
+                    🚪
                   </button>
                 </div>
               </header>
@@ -272,15 +268,15 @@ export function ChatScreen({
         <div className="modal-overlay" onClick={() => setShowMembersPanel(false)}>
           <div className="modal members-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Members ({currentRoom.members?.length || 0})</h3>
-              <button className="close-btn" onClick={() => setShowMembersPanel(false)}>&times;</button>
+              <h3>👥 Members ({currentRoom.members?.length || 0})</h3>
+              <button className="btn-icon small" onClick={() => setShowMembersPanel(false)}>✕</button>
             </div>
             <div className="modal-body members-list">
               {currentRoom.members?.map(member => (
                 <div key={member.id} className="member-item">
                   <div
                     className="member-avatar"
-                    style={{ backgroundColor: getAvatarColor(member.id) }}
+                    style={{ background: `linear-gradient(135deg, ${getAvatarColor(member.id)}, #8b5cf6)` }}
                   >
                     {getInitials(member.nickname)}
                   </div>
@@ -288,15 +284,15 @@ export function ChatScreen({
                     <span className="member-name">
                       {member.nickname}
                       {member.id === currentRoom.ownerId && (
-                        <span className="owner-badge">Owner</span>
+                        <span className="owner-badge">👑 Owner</span>
                       )}
                       {member.id === user.id && (
                         <span className="you-badge">You</span>
                       )}
                     </span>
-                    {member.isOnline && (
-                      <span className="member-status online">Online</span>
-                    )}
+                    <span className={`member-status ${member.isOnline ? 'online' : ''}`}>
+                      {member.isOnline ? '● Online' : '○ Offline'}
+                    </span>
                   </div>
                   {isOwner && member.id !== user.id && (
                     <button
@@ -304,13 +300,16 @@ export function ChatScreen({
                       onClick={() => handleKickMember(member.id, member.nickname)}
                       title="Kick from room"
                     >
-                      Kick
+                      ❌ Kick
                     </button>
                   )}
                 </div>
               ))}
               {(!currentRoom.members || currentRoom.members.length === 0) && (
-                <div className="no-members">No members found</div>
+                <div className="no-members">
+                  <span style={{ fontSize: '48px', opacity: 0.5 }}>👥</span>
+                  <p>No members found</p>
+                </div>
               )}
             </div>
           </div>
