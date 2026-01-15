@@ -48,6 +48,19 @@ body {
   overflow: hidden;
 }
 
+.chat-screen {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
 /* ============================================
    LEFT NAVIGATION RAIL (Teams-style)
    ============================================ */
