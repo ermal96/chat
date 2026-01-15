@@ -14,15 +14,12 @@ interface SidebarProps {
   onCloseMobile?: () => void;
 }
 
-const MOODS = [
-  { emoji: '😊', label: 'Happy' },
-  { emoji: '🔥', label: 'On Fire' },
-  { emoji: '😂', label: 'LOL' },
-  { emoji: '🎮', label: 'Gaming' },
-  { emoji: '💻', label: 'Working' },
-  { emoji: '😴', label: 'Sleepy' },
-  { emoji: '🎵', label: 'Vibing' },
-  { emoji: '☕', label: 'Coffee' },
+const STATUSES = [
+  { color: '#92c353', label: 'Available' },
+  { color: '#ffaa44', label: 'Away' },
+  { color: '#c4314b', label: 'Busy' },
+  { color: '#c4314b', label: 'Do not disturb' },
+  { color: '#b4b4b4', label: 'Appear offline' },
 ];
 
 export function Sidebar({
@@ -36,8 +33,8 @@ export function Sidebar({
   showMobile
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [showMoodPicker, setShowMoodPicker] = useState(false);
-  const [currentMood, setCurrentMood] = useState<{ emoji: string; label: string } | null>(null);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<{ color: string; label: string }>(STATUSES[0]);
   const avatarColor = getAvatarColor(user.id);
 
   // Filter rooms based on search query
@@ -48,8 +45,8 @@ export function Sidebar({
   return (
     <aside className={`sidebar ${showMobile ? 'show-mobile' : ''}`}>
       <div className="sidebar-header">
-        <h2>✨ Meme Chat</h2>
-        <button className="btn-icon" onClick={onNewRoom} title="New Chat">
+        <h2>Teams Chat</h2>
+        <button className="btn-icon" onClick={onNewRoom} title="New chat">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
           </svg>
@@ -59,10 +56,12 @@ export function Sidebar({
       {/* Search Bar */}
       <div className="sidebar-search">
         <div className="search-input-wrapper">
-          <span className="search-icon">🔍</span>
+          <svg className="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
           <input
             type="text"
-            placeholder="Search chats..."
+            placeholder="Search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -72,7 +71,9 @@ export function Sidebar({
               onClick={() => setSearchQuery('')}
               style={{ width: '24px', height: '24px', padding: '0' }}
             >
-              ✕
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
             </button>
           )}
         </div>
@@ -80,7 +81,7 @@ export function Sidebar({
 
       <div className="chats-section">
         <div className="section-header">
-          <span>💬 Chats ({filteredRooms.length})</span>
+          <span>Recent ({filteredRooms.length})</span>
         </div>
 
         <ul className="room-list">
@@ -96,9 +97,9 @@ export function Sidebar({
               <div className="room-content">
                 <div className="room-name">{room.name}</div>
                 <div className="room-meta">
-                  <span>👥 {room.memberCount || 1}</span>
+                  <span>{room.memberCount || 1} members</span>
                   {room.onlineCount && room.onlineCount > 0 && (
-                    <span style={{ color: 'var(--online)' }}>● {room.onlineCount} online</span>
+                    <span className="online-indicator">{room.onlineCount} online</span>
                   )}
                 </div>
               </div>
@@ -112,19 +113,19 @@ export function Sidebar({
 
           {filteredRooms.length === 0 && searchQuery && (
             <li className="no-items">
-              <p>🔍 No chats found</p>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Try a different search</p>
+              <p>No results found</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Try a different search term</p>
             </li>
           )}
 
           {rooms.size === 0 && !searchQuery && (
             <li className="no-items">
-              <p>🎉 Welcome to Meme Chat!</p>
+              <p>Welcome to Teams Chat</p>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                Start sharing memes with friends
+                Start a conversation with your team
               </p>
               <button className="btn small primary" onClick={onNewRoom}>
-                ➕ Create a chat
+                New chat
               </button>
             </li>
           )}
@@ -134,77 +135,67 @@ export function Sidebar({
       <div className="user-section" style={{ position: 'relative' }}>
         <div
           className="user-avatar"
-          style={{ background: `linear-gradient(135deg, ${avatarColor}, #8b5cf6)`, cursor: 'pointer' }}
-          onClick={() => setShowMoodPicker(!showMoodPicker)}
-          title="Set your mood"
+          style={{ background: `linear-gradient(135deg, ${avatarColor}, #5558a3)`, cursor: 'pointer' }}
+          onClick={() => setShowStatusPicker(!showStatusPicker)}
+          title="Set your status"
         >
-          {currentMood ? currentMood.emoji : getInitials(user.nickname)}
+          {getInitials(user.nickname)}
+          <span className="status-dot" style={{ backgroundColor: currentStatus.color }}></span>
         </div>
         <div className="user-info">
           <span className="user-name" onClick={onEditNickname} style={{ cursor: 'pointer' }} title="Click to change nickname">
             {user.nickname}
           </span>
-          <span className="user-status">
-            {currentMood ? `${currentMood.emoji} ${currentMood.label}` : '● Online'}
+          <span className="user-status" style={{ color: currentStatus.color }}>
+            {currentStatus.label}
           </span>
         </div>
-        <button className="btn-icon" onClick={onEditNickname} title="Edit nickname">
+        <button className="btn-icon" onClick={onEditNickname} title="Edit profile">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
           </svg>
         </button>
-        <button className="btn-icon danger" onClick={onLogout} title="Logout">
+        <button className="btn-icon" onClick={onLogout} title="Sign out">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
           </svg>
         </button>
 
-        {/* Mood Picker Dropdown */}
-        {showMoodPicker && (
+        {/* Status Picker Dropdown */}
+        {showStatusPicker && (
           <div className="status-dropdown" onClick={(e) => e.stopPropagation()}>
             <div style={{
               fontSize: '11px',
-              fontWeight: 700,
+              fontWeight: 600,
               color: 'var(--text-muted)',
               textTransform: 'uppercase',
-              letterSpacing: '1px',
+              letterSpacing: '0.5px',
               padding: '8px 14px 12px',
               borderBottom: '1px solid var(--border)'
             }}>
-              Set your mood
+              Set status
             </div>
-            {MOODS.map(mood => (
+            {STATUSES.map(status => (
               <div
-                key={mood.emoji}
+                key={status.label}
                 className="status-option"
                 onClick={() => {
-                  setCurrentMood(currentMood?.emoji === mood.emoji ? null : mood);
-                  setShowMoodPicker(false);
+                  setCurrentStatus(status);
+                  setShowStatusPicker(false);
                 }}
                 style={{
-                  background: currentMood?.emoji === mood.emoji ? 'var(--primary-glow)' : 'transparent'
+                  background: currentStatus.label === status.label ? 'var(--bg-hover)' : 'transparent'
                 }}
               >
-                <span style={{ fontSize: '20px' }}>{mood.emoji}</span>
-                <span className="status-text">{mood.label}</span>
-                {currentMood?.emoji === mood.emoji && (
-                  <span style={{ marginLeft: 'auto', color: 'var(--primary)' }}>✓</span>
+                <span className="status-indicator" style={{ backgroundColor: status.color }}></span>
+                <span className="status-text">{status.label}</span>
+                {currentStatus.label === status.label && (
+                  <svg style={{ marginLeft: 'auto' }} viewBox="0 0 24 24" width="16" height="16" fill="var(--primary)">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
                 )}
               </div>
             ))}
-            {currentMood && (
-              <div
-                className="status-option"
-                onClick={() => {
-                  setCurrentMood(null);
-                  setShowMoodPicker(false);
-                }}
-                style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '12px' }}
-              >
-                <span style={{ fontSize: '16px', opacity: 0.7 }}>✕</span>
-                <span className="status-text" style={{ opacity: 0.7 }}>Clear mood</span>
-              </div>
-            )}
           </div>
         )}
       </div>

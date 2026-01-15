@@ -96,7 +96,7 @@ function MessageExpiryBadge({ expiresAt }: { expiresAt?: string }) {
 
   return (
     <span className="expiry-badge">
-      ⏱ {remaining}
+      {remaining}
     </span>
   );
 }
@@ -289,7 +289,7 @@ export function MessageList({
               {/* Quick Reactions Bar */}
               <div className="message-actions">
                 <div className="quick-reactions">
-                  {['😂', '❤️', '🔥', '👍', '😮'].map(emoji => (
+                  {['👍', '❤️', '😂', '😮', '😢'].map(emoji => (
                     <button
                       key={emoji}
                       className="quick-reaction-btn"
@@ -311,7 +311,9 @@ export function MessageList({
                   }}
                   title="More reactions"
                 >
-                  ➕
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                  </svg>
                 </button>
                 <button
                   className="action-btn"
@@ -321,7 +323,9 @@ export function MessageList({
                   }}
                   title="Reply"
                 >
-                  ↩️
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
+                  </svg>
                 </button>
                 {isOwn && (
                   <>
@@ -333,7 +337,9 @@ export function MessageList({
                       }}
                       title="Edit"
                     >
-                      ✏️
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                      </svg>
                     </button>
                     <button
                       className="action-btn delete"
@@ -343,7 +349,9 @@ export function MessageList({
                       }}
                       title="Delete"
                     >
-                      🗑️
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                      </svg>
                     </button>
                   </>
                 )}
@@ -369,10 +377,14 @@ export function MessageList({
 
       {messages.length === 0 && (
         <div className="no-messages">
-          <div className="empty-icon">🎉</div>
-          <p>Start the meme party!</p>
-          <p className="subtitle">Share GIFs, memes, and messages with friends</p>
-          <p className="subtitle" style={{ marginTop: '8px', fontSize: '12px', opacity: 0.7 }}>💡 Tip: Use @ to mention people</p>
+          <div className="empty-icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="var(--text-muted)">
+              <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+            </svg>
+          </div>
+          <p>No messages yet</p>
+          <p className="subtitle">Start the conversation by sending a message</p>
+          <p className="subtitle" style={{ marginTop: '8px', fontSize: '12px', opacity: 0.7 }}>Tip: Use @ to mention people</p>
         </div>
       )}
 

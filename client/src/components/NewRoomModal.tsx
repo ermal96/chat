@@ -27,31 +27,37 @@ export function NewRoomModal({ nickname, onCreateRoom, onJoinRoom, onClose }: Ne
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h3>New Room</h3>
-        <p className="subtitle">Create a new room or join an existing one</p>
+        <div className="modal-header">
+          <h3>New conversation</h3>
+          <button className="btn-icon small" onClick={onClose}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
 
         <div className="tabs">
           <button
             className={`tab ${activeTab === 'create' ? 'active' : ''}`}
             onClick={() => setActiveTab('create')}
           >
-            Create Room
+            New chat
           </button>
           <button
             className={`tab ${activeTab === 'join' ? 'active' : ''}`}
             onClick={() => setActiveTab('join')}
           >
-            Join Room
+            Join with code
           </button>
         </div>
 
         {activeTab === 'create' ? (
           <div className="tab-content">
             <div className="input-group">
-              <label>Room Name</label>
+              <label>Chat name</label>
               <input
                 type="text"
-                placeholder="Enter room name"
+                placeholder="Enter a name for your chat"
                 value={roomName}
                 onChange={e => setRoomName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleCreate()}
@@ -59,17 +65,17 @@ export function NewRoomModal({ nickname, onCreateRoom, onJoinRoom, onClose }: Ne
                 autoFocus
               />
             </div>
-            <div className="btn-group">
-              <button className="btn ghost" onClick={onClose}>Cancel</button>
+            <div className="modal-footer">
+              <button className="btn secondary" onClick={onClose}>Cancel</button>
               <button className="btn primary" onClick={handleCreate} disabled={!roomName.trim()}>
-                Create Room
+                Create
               </button>
             </div>
           </div>
         ) : (
           <div className="tab-content">
             <div className="input-group">
-              <label>Invite Code</label>
+              <label>Invite code</label>
               <input
                 type="text"
                 placeholder="Enter 6-character code"
@@ -81,10 +87,10 @@ export function NewRoomModal({ nickname, onCreateRoom, onJoinRoom, onClose }: Ne
                 style={{ textTransform: 'uppercase', letterSpacing: '4px', fontWeight: 600 }}
               />
             </div>
-            <div className="btn-group">
-              <button className="btn ghost" onClick={onClose}>Cancel</button>
-              <button className="btn secondary" onClick={handleJoin} disabled={!inviteCode.trim()}>
-                Join Room
+            <div className="modal-footer">
+              <button className="btn secondary" onClick={onClose}>Cancel</button>
+              <button className="btn primary" onClick={handleJoin} disabled={!inviteCode.trim()}>
+                Join
               </button>
             </div>
           </div>

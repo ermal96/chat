@@ -209,7 +209,9 @@ export function MessageInput({
             <span className="reply-preview">{replyingTo.content.slice(0, 50)}{replyingTo.content.length > 50 ? '...' : ''}</span>
           </div>
           <button className="cancel-reply" onClick={onCancelReply} type="button">
-            ✕
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
           </button>
         </div>
       )}
@@ -225,7 +227,9 @@ export function MessageInput({
             }}
             title="Emoji"
           >
-            😊
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+            </svg>
           </button>
 
           <button
@@ -237,7 +241,9 @@ export function MessageInput({
             }}
             title="GIF"
           >
-            GIF
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M11.5 9H13v6h-1.5V9zM9 9H6c-.6 0-1 .5-1 1v4c0 .5.4 1 1 1h3c.6 0 1-.5 1-1v-2H8.5v1.5h-2v-3H10V10c0-.5-.4-1-1-1zm10 1.5V9h-4.5v6H16v-2h2v-1.5h-2v-1h3z"/>
+            </svg>
           </button>
 
           <button
@@ -247,10 +253,11 @@ export function MessageInput({
               closeAllPickers();
               setShowMeme(!showMeme);
             }}
-            title="Memes"
-            style={{ fontSize: '12px' }}
+            title="Stickers"
           >
-            🔥
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M21.97 13.52v-.04C23.21 12.38 24 10.78 24 9c0-3.31-2.69-6-6-6-.26 0-.52.02-.78.06C16.19 1.23 14.24 0 12 0S7.81 1.23 6.78 3.06C6.52 3.02 6.26 3 6 3c-3.31 0-6 2.69-6 6 0 1.78.79 3.38 2.02 4.48v.04C.79 14.62 0 16.22 0 18c0 3.31 2.69 6 6 6 1.39 0 2.67-.48 3.69-1.28.74.18 1.51.28 2.31.28s1.57-.1 2.31-.28c1.02.8 2.3 1.28 3.69 1.28 3.31 0 6-2.69 6-6 0-1.78-.79-3.38-2.03-4.48zM12 21c-4.41 0-8-3.59-8-8 0-3.45 2.2-6.39 5.27-7.51.45-.14.91-.26 1.39-.34C11.1 5.05 11.54 5 12 5s.9.05 1.34.15c.48.08.94.2 1.39.34C17.8 6.61 20 9.55 20 13c0 4.41-3.59 8-8 8z"/>
+            </svg>
           </button>
 
           <button
@@ -260,10 +267,11 @@ export function MessageInput({
               closeAllPickers();
               setShowTextMenu(!showTextMenu);
             }}
-            title="Text Effects"
-            style={{ fontSize: '11px', fontWeight: 'bold' }}
+            title="Format"
           >
-            Aa
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M5 17v2h14v-2H5zm4.5-4.2h5l.9 2.2h2.1L12.75 4h-1.5L6.5 15h2.1l.9-2.2zM12 5.98L13.87 11h-3.74L12 5.98z"/>
+            </svg>
           </button>
 
           <button
@@ -279,10 +287,11 @@ export function MessageInput({
               closeAllPickers();
               setTimeout(() => inputRef.current?.focus(), 0);
             }}
-            title="Mention someone"
-            style={{ fontSize: '14px', fontWeight: 'bold' }}
+            title="Mention"
           >
-            @
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
+            </svg>
           </button>
 
           <input
@@ -344,7 +353,7 @@ export function MessageInput({
           <div className="emoji-picker-wrapper">
             <div className="gif-picker" onClick={(e) => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
-                ✨ Text Effects
+                Text Format
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <button
@@ -353,52 +362,35 @@ export function MessageInput({
                   disabled={!content.trim()}
                 >
                   <span style={{ fontWeight: 600 }}>sPoNgEbOb</span>
-                  <span style={{ fontSize: '11px', opacity: 0.7 }}>mOcKiNg TeXt</span>
+                  <span style={{ fontSize: '11px', opacity: 0.7 }}>Alternating case</span>
                 </button>
                 <button
                   onClick={() => applyTextTransform('/loud')}
                   className="text-effect-btn"
                   disabled={!content.trim()}
                 >
-                  <span style={{ fontWeight: 600 }}>LOUD!!!</span>
-                  <span style={{ fontSize: '11px', opacity: 0.7 }}>SCREAM YOUR MESSAGE</span>
+                  <span style={{ fontWeight: 600 }}>UPPERCASE</span>
+                  <span style={{ fontSize: '11px', opacity: 0.7 }}>All caps with emphasis</span>
                 </button>
                 <button
                   onClick={() => applyTextTransform('/whisper')}
                   className="text-effect-btn"
                   disabled={!content.trim()}
                 >
-                  <span style={{ fontWeight: 600 }}>whisper...</span>
-                  <span style={{ fontSize: '11px', opacity: 0.7 }}>quiet voice...</span>
-                </button>
-                <button
-                  onClick={() => applyTextTransform('/uwu')}
-                  className="text-effect-btn"
-                  disabled={!content.trim()}
-                >
-                  <span style={{ fontWeight: 600 }}>UwU</span>
-                  <span style={{ fontSize: '11px', opacity: 0.7 }}>kawaii text uwu</span>
-                </button>
-                <button
-                  onClick={() => applyTextTransform('/clap')}
-                  className="text-effect-btn"
-                  disabled={!content.trim()}
-                >
-                  <span style={{ fontWeight: 600 }}>👏 Clap 👏</span>
-                  <span style={{ fontSize: '11px', opacity: 0.7 }}>emphasis 👏 between 👏 words</span>
+                  <span style={{ fontWeight: 600 }}>lowercase</span>
+                  <span style={{ fontSize: '11px', opacity: 0.7 }}>Quiet text style</span>
                 </button>
                 <button
                   onClick={() => applyTextTransform('/reverse')}
                   className="text-effect-btn"
                   disabled={!content.trim()}
                 >
-                  <span style={{ fontWeight: 600 }}>esreveR</span>
-                  <span style={{ fontSize: '11px', opacity: 0.7 }}>backwards text</span>
+                  <span style={{ fontWeight: 600 }}>Reverse</span>
+                  <span style={{ fontSize: '11px', opacity: 0.7 }}>Backwards text</span>
                 </button>
               </div>
               <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                💡 Type your message first, then click an effect!<br/>
-                Or use commands: /mock /loud /uwu /clap /whisper /reverse
+                Type your message first, then click a format option.
               </div>
             </div>
           </div>
