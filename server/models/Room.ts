@@ -12,6 +12,7 @@ export interface IRoom {
   inviteCode: string;
   name: string;
   type: RoomType;
+  ownerId: string; // Room creator who can kick members
   members: IRoomMember[];
   createdAt: Date;
 }
@@ -26,6 +27,7 @@ const RoomSchema = new Schema<IRoom>({
   inviteCode: { type: String, required: true, unique: true, uppercase: true },
   name: { type: String, required: true },
   type: { type: String, enum: ['group', 'direct'], required: true },
+  ownerId: { type: String, required: true },
   members: [RoomMemberSchema],
   createdAt: { type: Date, default: Date.now }
 });

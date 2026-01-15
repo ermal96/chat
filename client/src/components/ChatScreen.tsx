@@ -30,6 +30,7 @@ interface ChatScreenProps {
   onReply: (message: Message) => void;
   onCancelReply: () => void;
   onLeaveRoom: (roomId: string) => void;
+  onKickUser: (roomId: string, userId: string) => void;
   onCreateRoom: (nickname: string, roomName: string, roomType: 'group' | 'direct') => void;
   onJoinRoom: (nickname: string, inviteCode: string) => void;
   onChangeNickname: (newNickname: string) => void;
@@ -54,6 +55,7 @@ export function ChatScreen({
   onReply,
   onCancelReply,
   onLeaveRoom,
+  onKickUser,
   onCreateRoom,
   onJoinRoom,
   onChangeNickname,
@@ -63,7 +65,16 @@ export function ChatScreen({
   const [showNewRoomModal, setShowNewRoomModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showEditNickname, setShowEditNickname] = useState(false);
+  const [showMembersPanel, setShowMembersPanel] = useState(false);
   const [newNickname, setNewNickname] = useState(user.nickname);
+
+  const isOwner = currentRoom?.ownerId === user.id;
+
+  const handleKickMember = (memberId: string, memberName: string) => {
+    if (confirm(`Kick ${memberName} from the room?`)) {
+      onKickUser(currentRoom!.id, memberId);
+    }
+  };
 
   const handleSaveNickname = () => {
     if (newNickname.trim() && newNickname.trim() !== user.nickname) {
@@ -150,6 +161,11 @@ export function ChatScreen({
                 </div>
 
                 <div className="room-actions">
+                  <button className="btn-icon" onClick={() => setShowMembersPanel(true)} title="Members">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                    </svg>
+                  </button>
                   <button className="btn-icon" onClick={() => setShowInviteModal(true)} title="Invite">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                       <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
@@ -246,6 +262,56 @@ export function ChatScreen({
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowEditNickname(false)}>Cancel</button>
               <button className="btn primary" onClick={handleSaveNickname}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Members Panel Modal */}
+      {showMembersPanel && currentRoom && (
+        <div className="modal-overlay" onClick={() => setShowMembersPanel(false)}>
+          <div className="modal members-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Members ({currentRoom.members?.length || 0})</h3>
+              <button className="close-btn" onClick={() => setShowMembersPanel(false)}>&times;</button>
+            </div>
+            <div className="modal-body members-list">
+              {currentRoom.members?.map(member => (
+                <div key={member.id} className="member-item">
+                  <div
+                    className="member-avatar"
+                    style={{ backgroundColor: getAvatarColor(member.id) }}
+                  >
+                    {getInitials(member.nickname)}
+                  </div>
+                  <div className="member-info">
+                    <span className="member-name">
+                      {member.nickname}
+                      {member.id === currentRoom.ownerId && (
+                        <span className="owner-badge">Owner</span>
+                      )}
+                      {member.id === user.id && (
+                        <span className="you-badge">You</span>
+                      )}
+                    </span>
+                    {member.isOnline && (
+                      <span className="member-status online">Online</span>
+                    )}
+                  </div>
+                  {isOwner && member.id !== user.id && (
+                    <button
+                      className="kick-btn"
+                      onClick={() => handleKickMember(member.id, member.nickname)}
+                      title="Kick from room"
+                    >
+                      Kick
+                    </button>
+                  )}
+                </div>
+              ))}
+              {(!currentRoom.members || currentRoom.members.length === 0) && (
+                <div className="no-members">No members found</div>
+              )}
             </div>
           </div>
         </div>

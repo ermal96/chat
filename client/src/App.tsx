@@ -342,7 +342,7 @@ export default function App() {
       }
 
       case 'user_left': {
-        const payload = msg.payload as { roomId: string; user: { id: string; nickname: string } };
+        const payload = msg.payload as { roomId: string; user: { id: string; nickname: string }; kicked?: boolean; kickedBy?: string };
         setRooms(prev => {
           const room = prev.get(payload.roomId);
           if (!room) return prev;
@@ -352,6 +352,24 @@ export default function App() {
             members: (room.members || []).filter(m => m.id !== payload.user.id)
           });
         });
+        if (payload.kicked) {
+          showToast(`${payload.user.nickname} was kicked by ${payload.kickedBy}`, 'info');
+        }
+        break;
+      }
+
+      case 'user_kicked': {
+        // We were kicked from a room
+        const payload = msg.payload as { roomId: string; kickedBy: string };
+        setRooms(prev => {
+          const newRooms = new Map(prev);
+          newRooms.delete(payload.roomId);
+          return newRooms;
+        });
+        if (currentRoom?.id === payload.roomId) {
+          setCurrentRoom(null);
+        }
+        showToast(`You were kicked from the room by ${payload.kickedBy}`, 'error');
         break;
       }
 
@@ -567,6 +585,10 @@ export default function App() {
     send('leave_room', { roomId });
   };
 
+  const handleKickUser = (roomId: string, userId: string) => {
+    send('kick_user', { roomId, userId });
+  };
+
   const handleSelectRoom = (room: Room) => {
     setCurrentRoom(room);
     setReplyingTo(null);
@@ -683,6 +705,7 @@ export default function App() {
           onReply={handleReply}
           onCancelReply={handleCancelReply}
           onLeaveRoom={handleLeaveRoom}
+          onKickUser={handleKickUser}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onChangeNickname={handleChangeNickname}

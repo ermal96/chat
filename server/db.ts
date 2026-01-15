@@ -63,6 +63,7 @@ function toRoomType(doc: any): RoomType {
     inviteCode: doc.inviteCode,
     name: doc.name,
     type: doc.type as RoomTypeEnum,
+    ownerId: doc.ownerId,
     createdAt: doc.createdAt?.toISOString() || new Date().toISOString(),
     memberCount: doc.members?.length || 0
   };
@@ -235,6 +236,7 @@ export const database = {
       inviteCode: inviteCode.toUpperCase(),
       name,
       type,
+      ownerId: creatorId, // Creator is the owner
       members: [{ userId: creatorId, joinedAt: new Date() }]
     });
 
@@ -274,6 +276,27 @@ export const database = {
     if (room && room.members.length === 0) {
       await this.deleteRoom(roomId);
     }
+  },
+
+  async isRoomOwner(roomId: string, userId: string): Promise<boolean> {
+    const room = await Room.findById(roomId);
+    return room?.ownerId === userId;
+  },
+
+  async kickUserFromRoom(roomId: string, userId: string): Promise<boolean> {
+    const room = await Room.findById(roomId);
+    if (!room) return false;
+
+    // Can't kick the owner
+    if (room.ownerId === userId) return false;
+
+    const result = await Room.findByIdAndUpdate(
+      roomId,
+      { $pull: { members: { userId } } },
+      { new: true }
+    );
+
+    return !!result;
   },
 
   async getRoomMembers(roomId: string): Promise<{ id: string; nickname: string }[]> {

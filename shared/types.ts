@@ -6,6 +6,7 @@ export interface Room {
   inviteCode: string;
   name: string;
   type: RoomType;
+  ownerId: string; // Room creator who can kick members
   createdAt: string;
   memberCount?: number;
   members?: UserInfo[];
@@ -93,6 +94,7 @@ export type ClientMessageType =
   | 'create_room'
   | 'join_room'
   | 'leave_room'
+  | 'kick_user'
   | 'send_message'
   | 'edit_message'
   | 'delete_message'
@@ -120,6 +122,7 @@ export type ServerMessageType =
   | 'room_created'
   | 'room_joined'
   | 'room_left'
+  | 'user_kicked'
   | 'new_message'
   | 'message_edited'
   | 'message_deleted'
@@ -206,6 +209,11 @@ export interface TypingPayload {
 
 export interface LeaveRoomPayload {
   roomId: string;
+}
+
+export interface KickUserPayload {
+  roomId: string;
+  userId: string; // User to kick
 }
 
 export interface ReconnectPayload {

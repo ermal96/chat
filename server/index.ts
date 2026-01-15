@@ -17,6 +17,7 @@ import {
   ReactionPayload,
   TypingPayload,
   LeaveRoomPayload,
+  KickUserPayload,
   ReconnectPayload,
   RegisterPayload,
   LoginPayload,
@@ -257,6 +258,9 @@ async function handleMessage(ws: WebSocket, message: ClientMessage): Promise<voi
       break;
     case 'leave_room':
       await handleLeaveRoom(ws, client, message.payload as LeaveRoomPayload);
+      break;
+    case 'kick_user':
+      await handleKickUser(ws, client, message.payload as KickUserPayload);
       break;
     case 'send_message':
       await handleSendMessage(ws, client, message.payload as SendMessagePayload);
@@ -547,6 +551,72 @@ async function handleLeaveRoom(ws: WebSocket, client: ConnectedClient, payload: 
   });
 
   console.log(`${client.user.nickname} left room: ${roomId}`);
+}
+
+async function handleKickUser(ws: WebSocket, client: ConnectedClient, payload: KickUserPayload): Promise<void> {
+  const { roomId, userId } = payload;
+
+  if (!client.user) {
+    send(ws, { type: 'error', payload: { message: 'Not authenticated' } });
+    return;
+  }
+
+  // Check if the client is the room owner
+  const isOwner = await database.isRoomOwner(roomId, client.user.id);
+  if (!isOwner) {
+    send(ws, { type: 'error', payload: { message: 'Only the room owner can kick users' } });
+    return;
+  }
+
+  // Can't kick yourself (the owner)
+  if (userId === client.user.id) {
+    send(ws, { type: 'error', payload: { message: 'Cannot kick yourself' } });
+    return;
+  }
+
+  // Kick the user from the database
+  const kicked = await database.kickUserFromRoom(roomId, userId);
+  if (!kicked) {
+    send(ws, { type: 'error', payload: { message: 'Failed to kick user' } });
+    return;
+  }
+
+  // Find the kicked user's connection and remove them from the room
+  const kickedUserNickname = await getUserNickname(userId);
+
+  // Remove room from kicked user's client if they're online
+  for (const [kickedWs, kickedClient] of clients.entries()) {
+    if (kickedClient.user?.id === userId) {
+      kickedClient.rooms.delete(roomId);
+      kickedClient.typingIn.delete(roomId);
+
+      // Notify the kicked user
+      send(kickedWs, {
+        type: 'user_kicked',
+        payload: { roomId, kickedBy: client.user.nickname }
+      });
+      break;
+    }
+  }
+
+  // Notify everyone in the room
+  broadcastToRoom(roomId, {
+    type: 'user_left',
+    payload: {
+      roomId,
+      user: { id: userId, nickname: kickedUserNickname, avatar: getAvatarColor(userId) },
+      kicked: true,
+      kickedBy: client.user.nickname
+    }
+  });
+
+  console.log(`${client.user.nickname} kicked ${kickedUserNickname} from room: ${roomId}`);
+}
+
+// Helper to get user nickname
+async function getUserNickname(userId: string): Promise<string> {
+  const user = await database.getUser(userId);
+  return user?.nickname || 'Unknown';
 }
 
 async function handleSendMessage(ws: WebSocket, client: ConnectedClient, payload: SendMessagePayload): Promise<void> {
